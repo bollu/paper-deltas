@@ -225,14 +225,13 @@ We construct a family of useful operators around this object.
 % why default data family instances do not make sense
 % https://stackoverflow.com/questions/18965939/data-family-default-instances
 \begin{code}
-type family EotPatch a = p | p -> a
+type family Patch a = p | p -> a
 class Diff a p | a -> p, p -> a where
-
     patchempty :: p
     patchappend :: p -> p -> p
     diff :: a -> a -> p
-    -- default diff :: (HasEot a, EotDiff (Eot a)) => a -> a -> Patch (Eot a)
-    -- diff a a' = eotdiff (toEot a) (toEot a')
+    -- default diff :: (Has a, Diff ( a)) => a -> a -> Patch ( a)
+    -- diff a a' = diff (to a) (to a')
 
     patch :: p -> a -> a
 
@@ -260,41 +259,45 @@ to derive the \hsmint{Diff} instance for any algebraic data type.
 
 % https://generics-eot.readthedocs.io/en/stable/tutorial.html
 \begin{code}
-class (p ~ EotPatch a) => EotDiff a p where
-    eotpatchempty :: EotPatch a
-    eotpatchappend :: p -> p -> p
-    eotdiff :: a -> a -> p
-    eotpatch :: p -> a -> a
+-- class (p ~ Patch a) => Diff a p where
+--     patchempty :: Patch a
+--     patchappend :: p -> p -> p
+--     diff :: a -> a -> p
+--     patch :: p -> a -> a
 
-data EitherPatch a b pa pb = PL a | PR b | PPL pa | PPR pb
+data EitherPatch a b pa pb = PL a | PR b | PPL pa | PPR pb deriving(Show)
 
-type instance EotPatch (Either a b) = EitherPatch a b (EotPatch a) (EotPatch b)
-instance (EotDiff a pa, EotDiff b pb) => EotDiff (Either a b) (EitherPatch a b pa pb) where
-    eotpatchempty = PPL (eotpatchempty)
-    eotpatchappend = undefined
-    eotdiff = undefined
-    eotpatch = undefined
+type instance Patch (Either a b) = EitherPatch a b (Patch a) (Patch b)
+instance (Diff a pa, Diff b pb) => Diff (Either a b) (EitherPatch a b pa pb) where
+    patchempty = PPL (patchempty)
+    patchappend _ (PL a) = (PL a)
+    patchappend _ (PR b) = (PR b)
+    patchappend (PPL pa) (PPL pa') = PPL (pa <> pa')
+    patchappend (PPR pb) (PPR pb') = PPR (pb <> pb')
+    patchappend x y = error $ "unable to combine patches!"
+    diff (Left a) (Left a') = PPL (diff a a')
+    diff (Right b) (Right b') = PPR (diff  b b')
+    diff (Left _) (Right b) = PR b
+    diff (Right _) (Left a) = PL a
+    patch (PL a) _ = Left a
+    patch (PR b) _ = Right b
+    patch (PPL pa) (Left a)  = Left (pa <>> a)
+    patch (PPR pb) (Right b)  = Right (pb <>> b)
 
-type instance EotPatch () = ()
-instance EotDiff () () where
-    eotpatchempty = ()
-    eotpatchappend _ _ = ()
-    eotdiff _ _ = ()
-    eotpatch _ _ = ()
 
--- type instance EotPatch (x, xs) = (EotPatch x, EotPatch xs)
--- instance (EotDiff x p, EotDiff x' p') => EotDiff (x, x') (p, p') where
---     eotpatchempty = (eotpatchempty, eotpatchempty)
---     eotpatchappend (p1, p1') (p2, p2') = (eotpatchappend p1 p2, eotpatchappend p1' p2')
---     eotdiff (x1, x1') (x2, x2') = (eotdiff x1 x2, eotdiff x1' x2')
---     eotpatch (p, p') (x, x') = (eotpatch p x, eotpatch p' x')
+type instance Patch () = ()
+instance Diff () () where
+    patchempty = ()
+    patchappend _ _ = ()
+    diff _ _ = ()
+    patch _ _ = ()
 
-type instance EotPatch (x, xs) = (EotPatch x, EotPatch xs)
-instance (Diff x p , EotDiff y q, p ~ EotPatch x) => EotDiff (x, y) (p, q) where
-    eotpatchempty = (patchempty, eotpatchempty)
-    eotpatchappend (p1, p1') (p2, p2') = (patchappend p1 p2, eotpatchappend p1' p2')
-    eotdiff (x1, x1') (x2, x2') = (diff x1 x2, eotdiff x1' x2')
-    eotpatch (p, p') (x, x') = (patch p x, eotpatch p' x')
+type instance Patch (x, xs) = (Patch x, Patch xs)
+instance (Diff x p , Diff y q) => Diff (x, y) (p, q) where
+    patchempty = (patchempty, patchempty)
+    patchappend (p1, p1') (p2, p2') = (patchappend p1 p2, patchappend p1' p2')
+    diff (x1, x1') (x2, x2') = (diff x1 x2, diff x1' x2')
+    patch (p, p') (x, x') = (patch p x, patch p' x')
 
 \end{code}
 
