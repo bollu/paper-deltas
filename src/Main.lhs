@@ -61,16 +61,19 @@
 \begin{document}
 
 %% Title information
-\title[Short Title]{Full Title}         %% [Short Title] is optional;
-                                        %% when present, will be used in
-                                        %% header instead of Full Title.
-\titlenote{with title note}             %% \titlenote is optional;
-                                        %% can be repeated if necessary;
-                                        %% contents suppressed with 'anonymous'
-\subtitle{Subtitle}                     %% \subtitle is optional
-\subtitlenote{with subtitle note}       %% \subtitlenote is optional;
-                                        %% can be repeated if necessary;
-                                        %% contents suppressed with 'anonymous'
+%% [Short Title] is optional;
+%% when present, will be used in
+%% header instead of Full Title.
+\title[Deltas: an algbraic theory of difs]{Full Title}
+%% \titlenote is optional;
+%% can be repeated if necessary;
+%% contents suppressed with 'anonymous'
+\titlenote{with title note}
+%% \subtitle is optional
+%% \subtitlenote is optional;\subtitle{Subtitle}                     
+%% can be repeated if necessary;
+%% contents suppressed with 'anonymous'
+\subtitlenote{with subtitle note}       
 
 
 %% Author information
@@ -84,49 +87,21 @@
 %% extraction tools.
 
 %% Author with single affiliation.
-\author{First1 Last1}
+\author{Siddharth Bhat}
 \authornote{with author1 note}          %% \authornote is optional;
                                         %% can be repeated if necessary
 \orcid{nnnn-nnnn-nnnn-nnnn}             %% \orcid is optional
 \affiliation{
-  \position{Position1}
-  \department{Department1}              %% \department is recommended
-  \institution{Institution1}            %% \institution is required
-  \streetaddress{Street1 Address1}
-  \city{City1}
-  \state{State1}
-  \postcode{Post-Code1}
-  \country{Country1}                    %% \country is recommended
+  \position{}
+  \department{Computer Science}              
+  \institution{International Institute of Information Technology, Hyderabad}
+  \streetaddress{}
+  \city{}
+  \state{}
+  \postcode{}
+  \country{India}                    %% \country is recommended
 }
-\email{first1.last1@inst1.edu}          %% \email is recommended
-
-%% Author with two affiliations and emails.
-\author{First2 Last2}
-\authornote{with author2 note}          %% \authornote is optional;
-                                        %% can be repeated if necessary
-\orcid{nnnn-nnnn-nnnn-nnnn}             %% \orcid is optional
-\affiliation{
-  \position{Position2a}
-  \department{Department2a}             %% \department is recommended
-  \institution{Institution2a}           %% \institution is required
-  \streetaddress{Street2a Address2a}
-  \city{City2a}
-  \state{State2a}
-  \postcode{Post-Code2a}
-  \country{Country2a}                   %% \country is recommended
-}
-\email{first2.last2@inst2a.com}         %% \email is recommended
-\affiliation{
-  \position{Position2b}
-  \department{Department2b}             %% \department is recommended
-  \institution{Institution2b}           %% \institution is required
-  \streetaddress{Street3b Address2b}
-  \city{City2b}
-  \state{State2b}
-  \postcode{Post-Code2b}
-  \country{Country2b}                   %% \country is recommended
-}
-\email{first2.last2@inst2b.org}         %% \email is recommended
+\email{siddharth.bhat@research.iiit.ac.in}          %% \email is recommended
 
 
 %% Abstract
@@ -172,6 +147,45 @@ Text of abstract \ldots.
 
 
 \section{Introduction}
+
+We first begin with our GHC incantations:
+\begin{code}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
+\end{code}
+
+Next, we define the typeclass which we will constantly end up using:
+\begin{code}
+-- forall s. mact mempty s = s
+-- forall m1 m2 s. (m1 <> m2) <>> s = m2 <>> (m1 <>> s)
+class Monoid m => MonoidAction m s | s -> m where
+    mact :: m -> s -> s
+
+(<>>) :: MonoidAction m s => m -> s -> s
+(<>>) = mact
+
+
+-- forall s. mdelta s s = mempty
+-- forall s1 s2. (s2 <-> s1) <>> s1 = s2
+class MonoidAction m s => MonoidDelta s m | s -> m where
+    mdelta :: s -> s -> m
+
+(<->) :: MonoidDelta s m => s -> s -> m
+(<->) = mdelta
+
+\end{code}
+
+\begin{code}
+class Monoid g => Group g where
+    ginv :: g -> g
+
+class GroupAction g s | s -> g where
+    gact :: g -> s -> s
+
+
+class GroupAction g s => GroupDelta s g | s -> g where
+    gdelta :: s -> s -> g
+\end{code}
 
 \begin{code}
 main :: IO ()
