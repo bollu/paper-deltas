@@ -54,6 +54,7 @@
                         %% http://ctan.org/pkg/subcaption
 \usepackage{minted}
 
+
 % environments
 \newenvironment{code}{\VerbatimEnvironment \begin{minted}{haskell}}{\end{minted}}
 \newcommand{\hsmint}[1]{\mintinline{haskell}{#1}}
@@ -175,8 +176,11 @@ We first begin with our GHC incantations:
 --     |                    ^^^^^^^^^^^^^^^^^^^^^^^^
 -- 
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DefaultSignatures #-}
 
 import Data.Monoid
+import Generics.Eot
+
 \end{code}
 
 Next, we define the typeclass which we will constantly end up using:
@@ -216,12 +220,17 @@ the $\hsmint{Patch}$ instance of a given type. We then showcase
 this for multiple purposes, including pretty printing, caching, and debugging.
 We construct a family of useful operators around this object.
 
+% why default data family instances do not make sense
+% https://stackoverflow.com/questions/18965939/data-family-default-instances
 \begin{code}
 class Diff a where
     data Patch a
     patchempty :: Patch a 
     patchappend :: Patch a -> Patch a -> Patch a
     diff :: a -> a -> Patch a
+    default diff :: (HasEot a, EotDiff (Eot a)) => a -> a -> Patch (Eot a)
+    diff a a' = eotdiff (toEot a) (toEot a')
+
     patch :: Patch a -> a -> a
 
 instance Diff a => Monoid (Patch a) where
@@ -241,6 +250,47 @@ has a structure which can be diffed. We have an associated data
 family \hsmint{Patch}, which is the type of patches for a diff. We
 then instantiate the boilerplate for the correct \hsmint{Monoid},
 \hsmint{MonoidAction}, and \hsmint{MonoidTorsor} defintions.
+
+
+We now use the \texttt{Generics} support in haskell to construct a method
+to derive the \hsmint{Diff} instance for any algebraic data type.
+
+% https://generics-eot.readthedocs.io/en/stable/tutorial.html
+\begin{code}
+class EotDiff a where
+    data EotPatch a
+    eotpatchempty :: EotPatch a 
+    eotpatchappend :: EotPatch a -> EotPatch a -> EotPatch a
+    eotdiff :: a -> a -> EotPatch a
+    eotpatch :: EotPatch a -> a -> a
+
+data EitherPatch a b da db = A a | B b | DA da | DB db
+instance (EotDiff a, EotDiff b) => EotDiff (Either a b) where
+    -- data EotPatch (Either a b) = EitherPatch a b (EotPatch a) (EotPatch b)
+    data EotPatch (Either a b) = PatchEitherA a | PatchEitherB b | 
+        PatchEitherDA (EotPatch a) | PatchEitherDB (EotPatch b)
+    eotpatchempty = undefined
+    eotpatchappend = undefined
+    eotdiff = undefined
+    eotpatch = undefined
+
+instance EotDiff () where
+    data EotPatch () = PatchUnit
+    eotpatchempty = PatchUnit
+    eotpatchappend _ _ = PatchUnit
+    eotdiff _ _ = PatchUnit
+    eotpatch _ _ = ()
+
+
+
+instance (Diff x, EotDiff xs) => EotDiff (x, xs) where
+    data EotPatch (x, xs) = PatchTuple (EotPatch x) (EotPatch xs)
+    eotpatchempty = undefined
+    eotpatchappend = undefined
+    eotdiff = undefined
+    eotpatch = undefined
+
+\end{code}
 
 \begin{code}
 class Monoid g => Group g where
