@@ -1,0 +1,14 @@
+sudo: required
+dist: xenial
+language: python
+before_install:
+- sudo apt-get -qq update && sudo apt-get install -y --no-install-recommends texlive-fonts-recommended texlive-latex-extra texlive-fonts-extra dvipng texlive-latex-recommended texlive texlive-full python-pygments 
+script:
+- make paper/paper.pdf
+deploy:
+  provider: releases
+  api_key: 627cbf220d2d5392e3abd830052881711dcc7b95
+  file: paper/semantics.pdf
+  skip_cleanup: true
+  draft: false
+  overwrite: true
