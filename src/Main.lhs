@@ -260,20 +260,21 @@ to derive the \hsmint{Diff} instance for any algebraic data type.
 
 % https://generics-eot.readthedocs.io/en/stable/tutorial.html
 \begin{code}
--- class EotDiff a where
---     eotpatchempty :: EotPatch a 
---     eotpatchappend :: EotPatch a -> EotPatch a -> EotPatch a
---     eotdiff :: a -> a -> EotPatch a
---     eotpatch :: EotPatch a -> a -> a
--- 
--- data EitherPatch a b da db = A a | B b | DA da | DB db
--- instance (EotDiff a, EotDiff b) => EotDiff (Either a b) where
---     -- data EotPatch (Either a b) = EitherPatch a b (EotPatch a) (EotPatch b)
---     eotpatchempty = undefined
---     eotpatchappend = undefined
---     eotdiff = undefined
---     eotpatch = undefined
--- 
+class (p ~ EotPatch a) => EotDiff a p where
+    eotpatchempty :: EotPatch a
+    eotpatchappend :: p -> p -> a
+    eotdiff :: a -> a -> p
+    eotpatch :: p -> a -> a
+
+data EitherPatch a b da db = A a | B b | DA da | DB db
+
+type instance EotPatch (Either a b) = EitherPatch a b (EotPatch a) (EotPatch b)
+instance (EotDiff a pa, EotDiff b pb) => EotDiff (Either a b) (EitherPatch a b pa pb) where
+    eotpatchempty = undefined
+    eotpatchappend = undefined
+    eotdiff = undefined
+    eotpatch = undefined
+
 -- instance EotDiff () where
 --     eotpatchempty = PatchUnit
 --     eotpatchappend _ _ = PatchUnit
