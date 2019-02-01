@@ -179,6 +179,9 @@ We first begin with our GHC incantations:
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
 
 import Data.Monoid
 import Generics.Eot
@@ -228,12 +231,20 @@ We construct a family of useful operators around this object.
 type family Patch a = p | p -> a
 class Diff a p | a -> p, p -> a where
     patchempty :: p
+    default patchempty :: (HasEot a, Diff (Eot a) p) => p
+    patchempty = patchempty
+
     patchappend :: p -> p -> p
+    default patchappend :: (HasEot a, Diff (Eot a) p) => p -> p -> p
+    patchappend = patchappend
+
     diff :: a -> a -> p
-    -- default diff :: (Has a, Diff ( a)) => a -> a -> Patch ( a)
-    -- diff a a' = diff (to a) (to a')
+    default diff :: (HasEot a, Diff (Eot a) p) => a -> a -> p
+    diff = diff
 
     patch :: p -> a -> a
+    default patch :: (HasEot a, Diff (Eot a) p) => p -> a -> a
+    patch = patch
 
 instance Diff a p => Monoid p where
     mempty = patchempty
@@ -299,6 +310,25 @@ instance (Diff x p , Diff y q) => Diff (x, y) (p, q) where
     diff (x1, x1') (x2, x2') = (diff x1 x2, diff x1' x2')
     patch (p, p') (x, x') = (patch p x, patch p' x')
 
+type instance Patch Void = Void
+instance (Diff Void Void) where
+    patchempty = undefined
+    patchappend v _= absurd v
+    diff v  = absurd v
+    patch v = absurd v
+
+class (HasEot diff, Diff (Eot diff) (Patch (Eot diff))) =>  GenericDiff diff where
+
+-- Trying to get the type system to give me an instance of Diff
+-- from an instance of GenericDiff. Woe is me
+-- instance (GenericDiff a, HasEot a, Patch (Eot a) ~ p) => Diff a (Patch (Eot a)) where
+
+
+\end{code}
+
+% https://github.com/RafaelBocquet/haskell-mgeneric/
+\begin{code}
+data Contrived = Contrived { ca :: (), cb :: () } deriving(Show, Generic, GenericDiff)
 \end{code}
 
 \begin{code}
