@@ -52,10 +52,6 @@
                         %% http://ctan.org/pkg/booktabs
 \usepackage{subcaption} %% For complex figures with subfigures/subcaptions
                         %% http://ctan.org/pkg/subcaption
-\usepackage{minted}
-
-% environments
-\newenvironment{code}{\VerbatimEnvironment \begin{minted}{haskell}}{\end{minted}}
 
 
 \begin{document}
@@ -173,10 +169,7 @@ Text of abstract \ldots.
 
 \section{Introduction}
 
-\begin{code}
-main :: IO ()
-main = print "foo"
-\end{code}
+Text of paper \ldots
 
 
 %% Acknowledgments
@@ -208,4 +201,3 @@ main = print "foo"
 Text of appendix \ldots
 
 \end{document}
-

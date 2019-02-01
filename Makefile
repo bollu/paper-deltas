@@ -7,7 +7,7 @@ paper/paper.tex: src/Main.lhs
 	pandoc src/Main.lhs -o paper/paper.tex
 
 paper/paper.pdf: paper/paper.tex
-	cd paper && pdflatex -interaction=nonstopmode -shell-escape paper.tex 
+	cd paper && pdflatex  -shell-escape paper.tex 
 
 openpaper: paper/paper.pdf
 	rifle paper/paper.pdf
