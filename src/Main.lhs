@@ -163,6 +163,7 @@ We first begin with our GHC incantations:
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
 -- Flexible instances for:
 -- src/Main.lhs:216:20: error:
 --     * Illegal instance declaration for MonoidAction (Patch a) a
@@ -177,6 +178,7 @@ We first begin with our GHC incantations:
 -- 
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 import Data.Monoid
 import Generics.Eot
@@ -223,24 +225,25 @@ We construct a family of useful operators around this object.
 % why default data family instances do not make sense
 % https://stackoverflow.com/questions/18965939/data-family-default-instances
 \begin{code}
-class Diff a where
-    data Patch a
-    patchempty :: Patch a 
-    patchappend :: Patch a -> Patch a -> Patch a
-    diff :: a -> a -> Patch a
-    default diff :: (HasEot a, EotDiff (Eot a)) => a -> a -> Patch (Eot a)
-    diff a a' = eotdiff (toEot a) (toEot a')
+type family EotPatch a = p | p -> a
+class Diff a p | a -> p, p -> a where
 
-    patch :: Patch a -> a -> a
+    patchempty :: p
+    patchappend :: p -> p -> p
+    diff :: a -> a -> p
+    -- default diff :: (HasEot a, EotDiff (Eot a)) => a -> a -> Patch (Eot a)
+    -- diff a a' = eotdiff (toEot a) (toEot a')
 
-instance Diff a => Monoid (Patch a) where
+    patch :: p -> a -> a
+
+instance Diff a p => Monoid p where
     mempty = patchempty
     mappend = patchappend
 
-instance Diff a => MonoidAction (Patch a) a where
+instance Diff a p => MonoidAction p a where
     (<>>) = patch
 
-instance Diff a => MonoidTorsor a (Patch a) where
+instance Diff a p => MonoidTorsor a p where
     (<->) = diff
     
 \end{code}
@@ -257,38 +260,33 @@ to derive the \hsmint{Diff} instance for any algebraic data type.
 
 % https://generics-eot.readthedocs.io/en/stable/tutorial.html
 \begin{code}
-class EotDiff a where
-    data EotPatch a
-    eotpatchempty :: EotPatch a 
-    eotpatchappend :: EotPatch a -> EotPatch a -> EotPatch a
-    eotdiff :: a -> a -> EotPatch a
-    eotpatch :: EotPatch a -> a -> a
-
-data EitherPatch a b da db = A a | B b | DA da | DB db
-instance (EotDiff a, EotDiff b) => EotDiff (Either a b) where
-    -- data EotPatch (Either a b) = EitherPatch a b (EotPatch a) (EotPatch b)
-    data EotPatch (Either a b) = PatchEitherA a | PatchEitherB b | 
-        PatchEitherDA (EotPatch a) | PatchEitherDB (EotPatch b)
-    eotpatchempty = undefined
-    eotpatchappend = undefined
-    eotdiff = undefined
-    eotpatch = undefined
-
-instance EotDiff () where
-    data EotPatch () = PatchUnit
-    eotpatchempty = PatchUnit
-    eotpatchappend _ _ = PatchUnit
-    eotdiff _ _ = PatchUnit
-    eotpatch _ _ = ()
-
-
-
-instance (Diff x, EotDiff xs) => EotDiff (x, xs) where
-    data EotPatch (x, xs) = PatchTuple (EotPatch x) (EotPatch xs)
-    eotpatchempty = undefined
-    eotpatchappend = undefined
-    eotdiff = undefined
-    eotpatch = undefined
+-- class EotDiff a where
+--     eotpatchempty :: EotPatch a 
+--     eotpatchappend :: EotPatch a -> EotPatch a -> EotPatch a
+--     eotdiff :: a -> a -> EotPatch a
+--     eotpatch :: EotPatch a -> a -> a
+-- 
+-- data EitherPatch a b da db = A a | B b | DA da | DB db
+-- instance (EotDiff a, EotDiff b) => EotDiff (Either a b) where
+--     -- data EotPatch (Either a b) = EitherPatch a b (EotPatch a) (EotPatch b)
+--     eotpatchempty = undefined
+--     eotpatchappend = undefined
+--     eotdiff = undefined
+--     eotpatch = undefined
+-- 
+-- instance EotDiff () where
+--     eotpatchempty = PatchUnit
+--     eotpatchappend _ _ = PatchUnit
+--     eotdiff _ _ = PatchUnit
+--     eotpatch _ _ = ()
+-- 
+-- 
+-- 
+-- instance (Diff x p, EotDiff xs) => EotDiff (x, xs) where
+--     eotpatchempty = undefined
+--     eotpatchappend = undefined
+--     eotdiff = undefined
+--     eotpatch = undefined
 
 \end{code}
 
