@@ -262,32 +262,39 @@ to derive the \hsmint{Diff} instance for any algebraic data type.
 \begin{code}
 class (p ~ EotPatch a) => EotDiff a p where
     eotpatchempty :: EotPatch a
-    eotpatchappend :: p -> p -> a
+    eotpatchappend :: p -> p -> p
     eotdiff :: a -> a -> p
     eotpatch :: p -> a -> a
 
-data EitherPatch a b da db = A a | B b | DA da | DB db
+data EitherPatch a b pa pb = PL a | PR b | PPL pa | PPR pb
 
 type instance EotPatch (Either a b) = EitherPatch a b (EotPatch a) (EotPatch b)
 instance (EotDiff a pa, EotDiff b pb) => EotDiff (Either a b) (EitherPatch a b pa pb) where
-    eotpatchempty = undefined
+    eotpatchempty = PPL (eotpatchempty)
     eotpatchappend = undefined
     eotdiff = undefined
     eotpatch = undefined
 
--- instance EotDiff () where
---     eotpatchempty = PatchUnit
---     eotpatchappend _ _ = PatchUnit
---     eotdiff _ _ = PatchUnit
---     eotpatch _ _ = ()
--- 
--- 
--- 
--- instance (Diff x p, EotDiff xs) => EotDiff (x, xs) where
---     eotpatchempty = undefined
---     eotpatchappend = undefined
---     eotdiff = undefined
---     eotpatch = undefined
+type instance EotPatch () = ()
+instance EotDiff () () where
+    eotpatchempty = ()
+    eotpatchappend _ _ = ()
+    eotdiff _ _ = ()
+    eotpatch _ _ = ()
+
+-- type instance EotPatch (x, xs) = (EotPatch x, EotPatch xs)
+-- instance (EotDiff x p, EotDiff x' p') => EotDiff (x, x') (p, p') where
+--     eotpatchempty = (eotpatchempty, eotpatchempty)
+--     eotpatchappend (p1, p1') (p2, p2') = (eotpatchappend p1 p2, eotpatchappend p1' p2')
+--     eotdiff (x1, x1') (x2, x2') = (eotdiff x1 x2, eotdiff x1' x2')
+--     eotpatch (p, p') (x, x') = (eotpatch p x, eotpatch p' x')
+
+type instance EotPatch (x, xs) = (EotPatch x, EotPatch xs)
+instance (Diff x p , EotDiff y q, p ~ EotPatch x) => EotDiff (x, y) (p, q) where
+    eotpatchempty = (patchempty, eotpatchempty)
+    eotpatchappend (p1, p1') (p2, p2') = (patchappend p1 p2, eotpatchappend p1' p2')
+    eotdiff (x1, x1') (x2, x2') = (diff x1 x2, eotdiff x1' x2')
+    eotpatch (p, p') (x, x') = (patch p x, eotpatch p' x')
 
 \end{code}
 
