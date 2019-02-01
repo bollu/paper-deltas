@@ -111,10 +111,10 @@
 %% before \maketitle command
 \begin{abstract}
 We consider the concept of diffing between two elements of a type,
-and the ramifactions thereof. We find that there is a rich algebra which
-governs this process. We construct a process to automatically derive
+and the ramifactions thereof. We find that there is the rich algebra of
+Torsors which governs this process. We construct a process to automatically derive
 the type of diffs of a given base type. This leads us into detours of
-Affine spaces, Tensor algebra, and Information Theory. We explore usecases
+Torsors, Tensor algebra, and Information Theory. We explore usecases
 of this infrastrcture for debugging, logging, and caching. 
 We provide a literate implementation in Haskell which showcases these ideas.
 We also consider some extentions to the theory outlined here.
@@ -176,17 +176,17 @@ class Monoid m => MonoidAction m s | s -> m where
 
 -- forall s. mdelta s s = mempty
 -- forall s1 s2. (s2 <-> s1) <>> s1 = s2
-class MonoidAction m s => MonoidDelta s m | s -> m where
+class MonoidAction m s => MonoidTorsor s m | s -> m where
     mdelta :: s -> s -> m
 
-(<->) :: MonoidDelta s m => s -> s -> m
+(<->) :: MonoidTorsor s m => s -> s -> m
 (<->) = mdelta
 \end{code}
 
 Now that we have defined a space that is able to support monoidal structures
 over it, we begin to motivate this. We first introduce some terminology. We
 call the diff between two values a \hsmint{Patch}. Notice
-that a patch has the structure of \hsmint{MonoidDelta}. Since the
+that a patch has the structure of \hsmint{MonoidTorsor}. Since the
 diff of an element with iteself is the identity element \hsmint{(mempty = s <-> s)},
 this acting on \hsmint{s} will produce no change, as we would expect.
 Also notice that patches compose. That is, given two patches, we can
@@ -210,11 +210,11 @@ class GroupAction g s | s -> g where
 (<*>>) = gact
 
 
-class GroupAction g s => GroupDelta s g | s -> g where
+class GroupAction g s => GroupTorsor s g | s -> g where
     gdelta :: s -> s -> g
 
 
-(<*->) :: GroupDelta s g => s -> s -> g
+(<*->) :: GroupTorsor s g => s -> s -> g
 (<*->) = gdelta
 \end{code}
 

@@ -16,7 +16,7 @@ before_deploy:
 deploy:
   provider: releases
   api_key: 627cbf220d2d5392e3abd830052881711dcc7b95
-  file: paper/semantics.pdf
+  file: paper/paper.pdf
   skip_cleanup: true
   draft: false
   overwrite: true
