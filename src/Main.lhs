@@ -161,6 +161,22 @@ We first begin with our GHC incantations:
 \begin{code}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE TypeFamilies #-}
+-- Flexible instances for:
+-- src/Main.lhs:216:20: error:
+--     * Illegal instance declaration for MonoidAction (Patch a) a
+--         (All instance types must be of the form (T a1 ... an)
+--          where a1 ... an are *distinct type variables*,
+--          and each type variable appears at most once in the instance head.
+--          Use FlexibleInstances if you want to disable this.)
+--     * In the instance declaration for MonoidAction (Patch a) a
+--     |
+-- 216 | instance Diff a => MonoidAction (Patch a) a where
+--     |                    ^^^^^^^^^^^^^^^^^^^^^^^^
+-- 
+{-# LANGUAGE FlexibleInstances #-}
+
+import Data.Monoid
 \end{code}
 
 Next, we define the typeclass which we will constantly end up using:
@@ -169,18 +185,19 @@ Next, we define the typeclass which we will constantly end up using:
 -- forall m1 m2 s. (m1 <> m2) <>> s = m2 <>> (m1 <>> s)
 class Monoid m => MonoidAction m s | s -> m where
     mact :: m -> s -> s
-
-(<>>) :: MonoidAction m s => m -> s -> s
-(<>>) = mact
+    mact = (<>>)
+    -- (<>>) :: MonoidAction m s => m -> s -> s
+    (<>>) :: m -> s -> s
+    (<>>) = mact
 
 
 -- forall s. mdelta s s = mempty
 -- forall s1 s2. (s2 <-> s1) <>> s1 = s2
 class MonoidAction m s => MonoidTorsor s m | s -> m where
     mdelta :: s -> s -> m
-
-(<->) :: MonoidTorsor s m => s -> s -> m
-(<->) = mdelta
+    mdelta = (<->)
+    (<->) :: s -> s -> m
+    (<->) = mdelta
 \end{code}
 
 Now that we have defined a space that is able to support monoidal structures
@@ -197,7 +214,33 @@ respect to the type they diff.
 We will first create a framework that allows us to automatically derive
 the $\hsmint{Patch}$ instance of a given type. We then showcase
 this for multiple purposes, including pretty printing, caching, and debugging.
-We construct a family of useful operators around this object
+We construct a family of useful operators around this object.
+
+\begin{code}
+class Diff a where
+    data Patch a
+    patchempty :: Patch a 
+    patchappend :: Patch a -> Patch a -> Patch a
+    diff :: a -> a -> Patch a
+    patch :: Patch a -> a -> a
+
+instance Diff a => Monoid (Patch a) where
+    mempty = patchempty
+    mappend = patchappend
+
+instance Diff a => MonoidAction (Patch a) a where
+    (<>>) = patch
+
+instance Diff a => MonoidTorsor a (Patch a) where
+    (<->) = diff
+    
+\end{code}
+
+We now have a class \hsmint{Diff}, which represents a type that
+has a structure which can be diffed. We have an associated data
+family \hsmint{Patch}, which is the type of patches for a diff. We
+then instantiate the boilerplate for the correct \hsmint{Monoid},
+\hsmint{MonoidAction}, and \hsmint{MonoidTorsor} defintions.
 
 \begin{code}
 class Monoid g => Group g where
