@@ -56,6 +56,7 @@
 
 % environments
 \newenvironment{code}{\VerbatimEnvironment \begin{minted}{haskell}}{\end{minted}}
+\newcommand{\hsmint}[1]{\mintinline{haskell}{#1}}
 
 
 \begin{document}
@@ -64,16 +65,17 @@
 %% [Short Title] is optional;
 %% when present, will be used in
 %% header instead of Full Title.
-\title[Deltas: an algbraic theory of difs]{Full Title}
+% \title[Deltas: an algbraic theory of difs]{Full Title}
+\title{Deltas: An algebraic theory of diffing}
 %% \titlenote is optional;
 %% can be repeated if necessary;
 %% contents suppressed with 'anonymous'
-\titlenote{with title note}
+%\titlenote{with title note}
 %% \subtitle is optional
 %% \subtitlenote is optional;\subtitle{Subtitle}                     
 %% can be repeated if necessary;
 %% contents suppressed with 'anonymous'
-\subtitlenote{with subtitle note}       
+%\subtitlenote{with subtitle note}       
 
 
 %% Author information
@@ -108,7 +110,14 @@
 %% Note: \begin{abstract}...\end{abstract} environment must come
 %% before \maketitle command
 \begin{abstract}
-Text of abstract \ldots.
+We consider the concept of diffing between two elements of a type,
+and the ramifactions thereof. We find that there is a rich algebra which
+governs this process. We construct a process to automatically derive
+the type of diffs of a given base type. This leads us into detours of
+Affine spaces, Tensor algebra, and Information Theory. We explore usecases
+of this infrastrcture for debugging, logging, and caching. 
+We provide a literate implementation in Haskell which showcases these ideas.
+We also consider some extentions to the theory outlined here.
 \end{abstract}
 
 
@@ -136,7 +145,7 @@ Text of abstract \ldots.
 
 %% Keywords
 %% comma separated list
-\keywords{keyword1, keyword2, keyword3}  %% \keywords are mandatory in final camera-ready submission
+\keywords{types, algebra, functional pearl}  %% \keywords are mandatory in final camera-ready submission
 
 
 %% \maketitle
@@ -172,8 +181,23 @@ class MonoidAction m s => MonoidDelta s m | s -> m where
 
 (<->) :: MonoidDelta s m => s -> s -> m
 (<->) = mdelta
-
 \end{code}
+
+Now that we have defined a space that is able to support monoidal structures
+over it, we begin to motivate this. We first introduce some terminology. We
+call the diff between two values a \hsmint{Patch}. Notice
+that a patch has the structure of \hsmint{MonoidDelta}. Since the
+diff of an element with iteself is the identity element \hsmint{(mempty = s <-> s)},
+this acting on \hsmint{s} will produce no change, as we would expect.
+Also notice that patches compose. That is, given two patches, we can
+compose them to form a third patch which applies the original two patches
+in sequence. Hence, patches have a \hsmint{MonoidAction} structure with
+respect to the type they diff.
+
+We will first create a framework that allows us to automatically derive
+the $\hsmint{Patch}$ instance of a given type. We then showcase
+this for multiple purposes, including pretty printing, caching, and debugging.
+We construct a family of useful operators around this object
 
 \begin{code}
 class Monoid g => Group g where
@@ -182,9 +206,16 @@ class Monoid g => Group g where
 class GroupAction g s | s -> g where
     gact :: g -> s -> s
 
+(<*>>) :: GroupAction g s => g -> s -> s
+(<*>>) = gact
+
 
 class GroupAction g s => GroupDelta s g | s -> g where
     gdelta :: s -> s -> g
+
+
+(<*->) :: GroupDelta s g => s -> s -> g
+(<*->) = gdelta
 \end{code}
 
 \begin{code}
