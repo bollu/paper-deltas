@@ -328,7 +328,26 @@ class (HasEot diff, Diff (Eot diff) (Patch (Eot diff))) =>  GenericDiff diff whe
 
 % https://github.com/RafaelBocquet/haskell-mgeneric/
 \begin{code}
-data Contrived = Contrived { ca :: (), cb :: () } deriving(Show, Generic, GenericDiff)
+data Contrived = Contrived { ca :: (), cb :: () } deriving(Show, Generic)
+-- The fact that a new Data declaration works strongly suggests
+-- that my type family should become a data family.
+data PatchContrived = PatchContrived (Patch (Eot Contrived))
+type instance Patch Contrived = PatchContrived
+
+instance Diff Contrived PatchContrived where
+    patchempty = PatchContrived patchempty
+    patchappend (PatchContrived p1) (PatchContrived p2) = PatchContrived (patchappend p1 p2)
+    diff c1 c2 = PatchContrived (diff (toEot c1) (toEot c2))
+    patch (PatchContrived p) c = fromEot $ patch p (toEot c)
+
+el :: Either () ()
+el = Left ()
+
+er :: Either () ()
+er = Right ()
+
+diffll = diff el el
+
 \end{code}
 
 \begin{code}
