@@ -164,18 +164,6 @@ We first begin with our GHC incantations:
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
--- Flexible instances for:
--- src/Main.lhs:216:20: error:
---     * Illegal instance declaration for MonoidAction (Patch a) a
---         (All instance types must be of the form (T a1 ... an)
---          where a1 ... an are *distinct type variables*,
---          and each type variable appears at most once in the instance head.
---          Use FlexibleInstances if you want to disable this.)
---     * In the instance declaration for MonoidAction (Patch a) a
---     |
--- 216 | instance Diff a => MonoidAction (Patch a) a where
---     |                    ^^^^^^^^^^^^^^^^^^^^^^^^
--- 
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE UndecidableInstances #-}
@@ -183,6 +171,7 @@ We first begin with our GHC incantations:
 {-# LANGUAGE DeriveGeneric #-}
 import Data.Monoid
 import Generics.Eot
+import GHC.Generics
 
 \end{code}
 
@@ -329,6 +318,22 @@ gpatch pa a = fromEot $  pa <>> toEot a
 
 \end{code}
 
+\section{Diff using GHC Generics so I can work on recursive types}
+
+
+
+
+ghcdiff :: (Generic a, GDiff (Rep a) (Patch (Rep a))) => a -> a -> Patch (Rep a)
+ghcdiff = undefined
+
+
+
+
+ghcdiff :: (Generic a, GDiff (Rep a) (Patch (Rep a))) => a -> a -> Patch (Rep a)
+ghcdiff = undefined
+
+
+\section{Custom Diff instance for numbers}
 \begin{code}
 newtype NumDelta a = NumDelta a deriving(Eq, Show, Ord)
 type instance Patch Int = NumDelta Int
@@ -346,12 +351,44 @@ instance Num a => Diff a (NumDelta a)
 instance Num a => GDiff a (NumDelta a)
 \end{code}
 
+\section{Diffs for recursive types}
+
+\section{Efficient diffs exploiting sparsity}
+
+
 % https://github.com/RafaelBocquet/haskell-mgeneric/
+\section{Simple uses of code}
 \begin{code}
-data Foo = Foo { ca :: (), cb :: () } deriving(Show, Generic)
+data Foo = FooL { ca :: (), cb :: () } | 
+    FooR {cc :: Int, cd :: ()} deriving(Show, Generic)
 data Bar a = Bar a deriving(Show, Generic)
 -- The fact that a new Data declaration works strongly suggests
 -- that my type family should become a data family.
+
+-- This is fucked, because EOT cannot do recursive types properly.
+-- I need to switch to GHC generics, it looks like :(
+data Nat = Z | S (Nat) deriving(Show, Generic)
+
+{--
+*Main> :kind! (Patch (Eot Nat))
+(Patch (Eot Nat)) :: *
+= EitherPatch
+    ()
+    (Either (Nat, ()) Void)
+    ()
+    (EitherPatch (Nat, ()) Void (Patch Nat, ()) Void)
+
+This is a problem, because "Patch (Eot Nat)" refers to "Patch Nat".
+I can't equationally define "Patch Nat = Patch (Eot Nat)" because GHC
+reasons, so I think I will need to jump GHC generics hoops.
+--}
+
+n1 :: Nat
+n1 = S Z
+n2 :: Nat
+n2 = S (S Z)
+
+-- diffn1n2 = gdiff n1 n2
 
 
 el :: Either () ()
@@ -362,15 +399,15 @@ er = Right ()
 
 diffeler = gdiff el el
 
-foo1 = Foo () ()
+foo1 = FooL () ()
+foo2 = FooR 5 ()
 
 difffoo1foo1 = gdiff foo1 foo1
+difffoo1foo2 = gdiff foo1 foo2
  
 deltaint :: NumDelta Int
 deltaint = 4 <-> 5
 
--- deltaint :: NumDelta Int
--- deltaint = gdiff 4 5
 
 -- deltatuple :: NumDelta (Int, Int)
 deltatuple = gdiff (3 :: Int, 2 :: Int) (2, 3)
@@ -398,6 +435,8 @@ deltarr = gdiff r2 r3
 
 \end{code}
 
+
+\section{Invertible diffs}
 \begin{code}
 class Monoid g => Group g where
     ginv :: g -> g
@@ -408,8 +447,6 @@ class (Group g, MonoidAction g s) => GroupAction g s | s -> g where
 
 -- add new laws
 class (MonoidTorsor g s, GroupAction g s) => GroupTorsor g s | s -> g where
-
-
 \end{code}
 
 \begin{code}
