@@ -216,6 +216,9 @@ We construct a family of useful operators around this object.
 % https://stackoverflow.com/questions/18965939/data-family-default-instances
 \begin{code}
 type family Patch a = p | p -> a
+type family GGPatch a = p | p -> a
+-- GHC.Generic version of diff
+class (Monoid p, MonoidAction p a, MonoidTorsor p a) => GGDiff a p | p -> a where
 -- Generic version of diff
 class (Monoid p, MonoidAction p a, MonoidTorsor p a) => GDiff a p | p -> a where
 -- Concrete version of Diff
@@ -271,10 +274,12 @@ instance (MonoidTorsor pa a, MonoidTorsor pb b) => MonoidTorsor (EitherPatch a b
 
 
 type instance Patch (Either a b) = EitherPatch a b (Patch a) (Patch b)
+type instance GGPatch (Either a b) = EitherPatch a b (GGPatch a) (GGPatch b)
 instance (GDiff a pa, GDiff b pb) => GDiff (Either a b) (EitherPatch a b pa pb) where
 
 
 type instance Patch () = ()
+type instance GGPatch () = ()
 
 instance MonoidAction () () where
     mact () () = ()
@@ -285,6 +290,7 @@ instance MonoidTorsor () () where
 instance GDiff () () where
 
 type instance Patch (x, xs) = (Patch x, Patch xs)
+type instance GGPatch (x, xs) = (GGPatch x, GGPatch xs)
 instance (MonoidAction pa a, MonoidAction pb b) => MonoidAction (pa, pb) (a, b) where
     mact (p, p') (x, x') = (mact p x, mact p' x')
 
@@ -294,6 +300,7 @@ instance (MonoidTorsor pa a, MonoidTorsor pb b) => MonoidTorsor (pa, pb) (a, b) 
 instance (GDiff x p , GDiff y q) => GDiff (x, y) (p, q)
 
 type instance Patch Void = Void
+type instance GGPatch Void = Void
 instance Monoid Void where
     mempty = undefined
     v `mappend` _ = absurd v
@@ -313,6 +320,10 @@ instance GDiff Void Void
 gdiff :: (HasEot a,  GDiff (Eot a) (Patch (Eot a))) => a -> a -> Patch (Eot a)
 gdiff a a' = (toEot a) <-> (toEot a')
 
+ggdiff :: (Repr a,  GGDiff (Rep a) (GGPatch (Rep a))) => a -> a -> GGPatch (Rep a)
+ggdiff a a' = (rep a) <-> (rep a')
+
+
 gpatch :: (HasEot a, GDiff (Eot a) (Patch (Eot a))) => Patch (Eot a) -> a -> a
 gpatch pa a = fromEot $  pa <>> toEot a
 
@@ -323,14 +334,6 @@ gpatch pa a = fromEot $  pa <>> toEot a
 
 
 
-ghcdiff :: (Generic a, GDiff (Rep a) (Patch (Rep a))) => a -> a -> Patch (Rep a)
-ghcdiff = undefined
-
-
-
-
-ghcdiff :: (Generic a, GDiff (Rep a) (Patch (Rep a))) => a -> a -> Patch (Rep a)
-ghcdiff = undefined
 
 
 \section{Custom Diff instance for numbers}
