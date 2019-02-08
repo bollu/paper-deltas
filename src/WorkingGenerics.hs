@@ -18,6 +18,7 @@ import GHC.Generics
 import GHC.Exts (Constraint)
 import Control.Monad.State.Lazy
 import Control.Monad.Identity
+import qualified Data.Map.Strict as M
 
 -- type family DiffT (p :: * -> *) :: * -> *
 
@@ -210,9 +211,12 @@ instance Pairing ((,) a) ((->) a) where
 
 
 -- Example language
-data DSLF k = Add Int (Bool -> k)
-  | Clear k
-  | Total (Int -> k) deriving(Functor)
+type Key = String
+type Value = Int
+data DSLF k = 
+  Set Key Value k
+  | Get Key (Value -> k)
+  | Reset k deriving(Functor)
 
 type DSL a = Free DSLF a
 
@@ -220,68 +224,71 @@ type DSL a = Free DSLF a
 liftF :: (Functor f) => f a -> Free f a
 liftF fa = Branch $ Leaf <$> fa
 
-add :: Int -> DSL Bool
-add x = liftF $ Add x  id
+set :: Key -> Value -> DSL ()
+set k v = liftF $ Set k v ()
 
 clear :: DSL ()
-clear = liftF $ Clear ()
+clear = liftF $ Reset ()
 
-total :: DSL Int
-total = liftF $ Total id
+get :: Key -> DSL Value
+get k = liftF $ Get k id
 
 data CoDSLF k = CoDSLF {
-  addH :: Int -> (Bool, k),
-  clearH :: k,
-  totalH :: (Int, k)
+  setH :: Key -> Value -> k,
+  getH :: Key -> (Int, k),
+  resetH :: k
 } deriving(Functor)
 
 type Limit = Int
 type Count = Int
 type CoDSL = Cofree CoDSLF
-mkCoDSL :: Limit -> Count -> CoDSL (Limit, Count)
-mkCoDSL limit count = coiter next start
+
+mkCoDSL :: CoDSL (M.Map Key Value)
+mkCoDSL = coiter next start
   where
-    next w = CoDSLF (coAdd w) (coClear w) (coTotal w)
-    start = (limit, count)
+    next w = CoDSLF (coSet w) (coGet w) (coClear w)
+    start = M.empty
 
-coClear :: (Limit, Count) -> (Limit, Count)
-coClear (limit, count) = (limit, 0)
+coClear :: M.Map Key Value -> M.Map Key Value
+coClear _ = M.empty
 
-coTotal :: (Limit, Count) -> (Int, (Limit, Count))
-coTotal (limit, count) = (count, (limit, count))
+coSet :: M.Map Key Value -> Key -> Value -> M.Map Key Value
+coSet m k v = M.insert k v m
 
-coAdd :: (Limit, Count) -> Int -> (Bool, (Limit, Count))
-coAdd (limit, count) x = (test, (limit, next))
-  where
-    count' = count + x                        -- 1
-    test = count' <= limit                    -- 2
-    next = if test then count' else count     -- 3
+coGet :: M.Map Key Value -> Key -> (Value, M.Map Key Value)
+coGet m k = let v =  case m M.!? k of
+                        Just v -> v
+                        Nothing -> 1
+            in (v, m)
 
 
+-- set key v :: k
 instance Pairing CoDSLF DSLF where
-  pair f (CoDSLF a _ _) (Add x k) = pair f (a x) k
-  pair f (CoDSLF _ c _) (Clear k) = f c k
-  pair f (CoDSLF _ _ t) (Total k) = pair f t k
+  pair f (CoDSLF set _ _) (Set key v k) = f (set key v) k
+  pair f (CoDSLF _ get _) (Get key k) = pair f (get key) k
+  pair f (CoDSLF _ _ reset) (Reset k) = f reset k
 
 
-double :: DSL Int
+double :: DSL ()
 -- or if we want to be more general:
 --   double :: Monad m => AdderT m Int
 double = do
   -- capture the old count
-  t <- total
-  _ <- add t
-  total
+  t <- WorkingGenerics.get "k"
+  set "k" (2 * t)
+
+program :: DSL ()
+program = double >> double
 
 
 -- run with a given interpreter
-runLimit :: CoDSL a -> Int
-runLimit w = pair (\_ b -> b)  w double
+runLimit :: CoDSL (M.Map Key Value) -> M.Map Key Value
+runLimit w = pair (\a _ -> a) w program
+-- runLimit w = pair (\_ b -> b)  w double
 
 -- test with a given limit and start count
-testLimit :: Limit -> Count -> Int
-testLimit l c = runLimit  (mkCoDSL l c)
-
+testLimit :: M.Map Key Value
+testLimit = runLimit mkCoDSL
 
 
 -- TODO: incrementalize a given interpreter.
@@ -292,4 +299,4 @@ incremental = undefined
 
 
 main :: IO ()
-main = print "foo"
+main = print testLimit

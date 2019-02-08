@@ -173,6 +173,7 @@ import Data.Monoid
 import Generics.Eot
 import GHC.Generics
 import Language.Haskell.TH
+import qualified WorkingGenerics as WG
 
 \end{code}
 
@@ -452,7 +453,7 @@ class (MonoidTorsor g s, GroupAction g s) => GroupTorsor g s | s -> g where
 
 \begin{code}
 main :: IO ()
-main = print "foo"
+main = WG.main
 \end{code}
 
 

@@ -10,6 +10,12 @@
 - [Cofree meets Free](http://blog.sigfpe.com/2014/05/cofree-meets-free.html)
 - [Entropy as information loss](https://johncarlosbaez.wordpress.com/2011/06/02/a-characterization-of-entropy/)
 
+# To Think
+
+Try and derive deltas as as a list of `one-hole-contexts` + `delta at hole`.
+That is, each delta is some (collection of) changes made at context(s).
+Check if this results in the same formulation. If not, why does it not?
+
 # To setup:
 - [latex builds with Circle](https://discuss.circleci.com/t/latex-pdf-building/668/4)
 
