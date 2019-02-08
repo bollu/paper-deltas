@@ -10,6 +10,12 @@
 - [Cofree meets Free](http://blog.sigfpe.com/2014/05/cofree-meets-free.html)
 - [Entropy as information loss](https://johncarlosbaez.wordpress.com/2011/06/02/a-characterization-of-entropy/)
 
+# To do
+- Derive pretty `show` instances for the deltas to aid debugging
+- See if you can use the deltas / incremental nature as some kind of `Monad`
+- Try to check if `Free/Cofree` can be adapted for delta-style computation
+  to automatically create React like interfaces
+- Consider `Delta` on `Arrow`, which form networks.
 # To Think
 
 Try and derive deltas as as a list of `one-hole-contexts` + `delta at hole`.

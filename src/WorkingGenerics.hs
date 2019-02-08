@@ -210,32 +210,65 @@ instance Pairing ((,) a) ((->) a) where
   pair p f g = pair (flip p) g f
 
 
--- Example language1
+
+liftF :: (Functor f) => f a -> Free f a
+liftF fa = Branch $ Leaf <$> fa
+-- General infra for all languages
 type Key = String
 type Value = Int
 type Delta = Int
-data DSLF k = 
+
+-- Language with restricted key space
+type SmallKey = Int
+data Lang1F r = Update1 SmallKey Delta r deriving(Functor)
+type Lang1Free a = Free Lang1F a
+
+update1 :: SmallKey -> Delta -> Lang1Free ()
+update1 k d = liftF $ Update1 k d ()
+
+data CoLang1F k = CoLang1F {
+  update1H :: SmallKey -> Delta -> k
+} deriving(Functor)
+type CoLang1Free a = Cofree CoLang1F a
+
+mkCoLang1Free :: CoLang1Free ([Int])
+mkCoLang1Free = coiter next start where
+  start = repeat 0
+
+  next w = CoLang1F (coupdate w)
+
+  coupdate :: [Int] -> SmallKey -> Delta -> [Int]
+  coupdate l k d = replaceNth k (l!!k + d) l
+
+
+  replaceNth :: Int -> a -> [a] -> [a]
+  replaceNth _ _ [] = []
+  replaceNth n newVal (x:xs)
+   | n == 0 = newVal:xs
+   | otherwise = x:replaceNth (n-1) newVal xs
+
+instance Pairing CoLang1F Lang1F where
+  pair f (CoLang1F update) (Update1 key d k) = f (update key d) k
+
+-- Language with full keys and values
+data KVLangF k = 
   Set Key Value k
   | Update Key Delta k
   | Get Key (Value -> k)
   | Reset k deriving(Functor)
 
-type DSL a = Free DSLF a
+type KVLangFree a = Free KVLangF a
 
-
-liftF :: (Functor f) => f a -> Free f a
-liftF fa = Branch $ Leaf <$> fa
-
-set :: Key -> Value -> DSL ()
+set :: Key -> Value -> KVLangFree ()
 set k v = liftF $ Set k v ()
 
-clear :: DSL ()
+clear :: KVLangFree ()
 clear = liftF $ Reset ()
 
-get :: Key -> DSL Value
+get :: Key -> KVLangFree Value
 get k = liftF $ Get k id
 
-data CoDSLF k = CoDSLF {
+data CoKVLangF k = CoKVLangF {
   setH :: Key -> Value -> k,
   deltaH :: Key -> Delta -> k,
   getH :: Key -> (Int, k),
@@ -244,40 +277,39 @@ data CoDSLF k = CoDSLF {
 
 type Limit = Int
 type Count = Int
-type CoDSL = Cofree CoDSLF
+type CoKVLangFree = Cofree CoKVLangF
 
-mkCoDSL :: CoDSL (M.Map Key Value)
-mkCoDSL = coiter next start
+mkCoKVLangFree :: CoKVLangFree (M.Map Key Value)
+mkCoKVLangFree = coiter next start
   where
-    next w = CoDSLF (coSet w) (coUpdate w) (coGet w) (coClear w)
+    next w = CoKVLangF (coSet w) (coUpdate w) (coGet w) (coClear w)
     start = M.empty
 
-coClear :: M.Map Key Value -> M.Map Key Value
-coClear _ = M.empty
+    coClear :: M.Map Key Value -> M.Map Key Value
+    coClear _ = M.empty
 
-coSet :: M.Map Key Value -> Key -> Value -> M.Map Key Value
-coSet m k v = M.insert k v m
+    coSet :: M.Map Key Value -> Key -> Value -> M.Map Key Value
+    coSet m k v = M.insert k v m
 
-coGet :: M.Map Key Value -> Key -> (Value, M.Map Key Value)
-coGet m k = let v =  case m M.!? k of
-                        Just v -> v
-                        Nothing -> 1
-            in (v, m)
-coUpdate :: M.Map Key Value -> Key -> Delta -> M.Map Key Value
-coUpdate m k d = if M.member k m 
-                  then M.update (Just . (+ d)) k m
-                  else M.insert k d m
-
+    coGet :: M.Map Key Value -> Key -> (Value, M.Map Key Value)
+    coGet m k = let v =  case m M.!? k of
+                            Just v -> v
+                            Nothing -> 1
+                in (v, m)
+    coUpdate :: M.Map Key Value -> Key -> Delta -> M.Map Key Value
+    coUpdate m k d = if M.member k m 
+                      then M.update (Just . (+ d)) k m
+                      else M.insert k d m
 
 -- set key v :: k
-instance Pairing CoDSLF DSLF where
-  pair f (CoDSLF set _ _ _) (Set key v k) = f (set key v) k
-  pair f (CoDSLF _ update _ _) (Update key d k) = f (update key d) k
-  pair f (CoDSLF _ _ get _) (Get key k) = pair f (get key) k
-  pair f (CoDSLF _ _ _ reset) (Reset k) = f reset k
+instance Pairing CoKVLangF KVLangF where
+  pair f (CoKVLangF set _ _ _) (Set key v k) = f (set key v) k
+  pair f (CoKVLangF _ update _ _) (Update key d k) = f (update key d) k
+  pair f (CoKVLangF _ _ get _) (Get key k) = pair f (get key) k
+  pair f (CoKVLangF _ _ _ reset) (Reset k) = f reset k
 
 
-double :: DSL ()
+double :: KVLangFree ()
 -- or if we want to be more general:
 --   double :: Monad m => AdderT m Int
 double = do
@@ -285,19 +317,14 @@ double = do
   t <- WorkingGenerics.get "k"
   set "k" (2 * t)
 
-program :: DSL ()
-program = double >> double
-
-
--- run with a given interpreter
-runLimit :: CoDSL (M.Map Key Value) -> M.Map Key Value
-runLimit w = pair (\a _ -> a) w program
--- runLimit w = pair (\_ b -> b)  w double
+kvLangProgram :: KVLangFree ()
+kvLangProgram = double >> double
 
 -- test with a given limit and start count
-testLimit :: M.Map Key Value
-testLimit = runLimit mkCoDSL
-
+testKvLang :: M.Map Key Value
+testKvLang = run mkCoKVLangFree where
+  run :: CoKVLangFree (M.Map Key Value) -> M.Map Key Value
+  run w = pair (\a _ -> a) w kvLangProgram
 
 -- TODO: incrementalize a given interpreter.
 -- Figure out how to make the update incremental.
@@ -308,4 +335,4 @@ incremental = undefined
 
 
 main :: IO ()
-main = print testLimit
+main = print testKvLang
