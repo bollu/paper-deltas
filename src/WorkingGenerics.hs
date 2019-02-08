@@ -11,6 +11,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE Rank2Types #-}
+module WorkingGenerics where
 import GHC.Generics
 import GHC.Exts (Constraint)
 

@@ -17,11 +17,12 @@ cabal-version:       >=1.10
 
 executable deltas
   main-is:             Main.lhs
-  -- other-modules:
+  other-modules:       TemplateGenerics, WorkingGenerics, EotUser
   -- other-extensions:
   build-depends:       base >=4.10 && <4.11
                        , generics-eot
                        , generics-sop
                        , constraints
+                       , template-haskell
   hs-source-dirs:      src
   default-language:    Haskell2010

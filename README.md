@@ -10,3 +10,13 @@
 # To setup:
 - [latex builds with Circle](https://discuss.circleci.com/t/latex-pdf-building/668/4)
 
+# Learning how to generate TH
+```
+*Main> :set -XTemplateHaskell
+*Main> runQ [d| type instance Patch Float = NumDelta Float |]
+[TySynInstD Main.Patch (TySynEqn [ConT GHC.Types.Float] (AppT (ConT Main.NumDelta) (ConT GHC.Types.Float)))]
+```
+
+In general, ask it to generate whatever you want in the banana brackets, and it 
+should work.
+

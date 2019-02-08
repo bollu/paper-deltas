@@ -172,6 +172,7 @@ We first begin with our GHC incantations:
 import Data.Monoid
 import Generics.Eot
 import GHC.Generics
+import Language.Haskell.TH
 
 \end{code}
 
@@ -320,8 +321,8 @@ instance GDiff Void Void
 gdiff :: (HasEot a,  GDiff (Eot a) (Patch (Eot a))) => a -> a -> Patch (Eot a)
 gdiff a a' = (toEot a) <-> (toEot a')
 
-ggdiff :: (Repr a,  GGDiff (Rep a) (GGPatch (Rep a))) => a -> a -> GGPatch (Rep a)
-ggdiff a a' = (rep a) <-> (rep a')
+-- ggdiff :: (Repr a,  GGDiff (Rep a) (GGPatch (Rep a))) => a -> a -> GGPatch (Rep a)
+-- ggdiff a a' = (rep a) <-> (rep a')
 
 
 gpatch :: (HasEot a, GDiff (Eot a) (Patch (Eot a))) => Patch (Eot a) -> a -> a
@@ -330,9 +331,6 @@ gpatch pa a = fromEot $  pa <>> toEot a
 \end{code}
 
 \section{Diff using GHC Generics so I can work on recursive types}
-
-
-
 
 
 
