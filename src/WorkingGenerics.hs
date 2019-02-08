@@ -210,11 +210,13 @@ instance Pairing ((,) a) ((->) a) where
   pair p f g = pair (flip p) g f
 
 
--- Example language
+-- Example language1
 type Key = String
 type Value = Int
+type Delta = Int
 data DSLF k = 
   Set Key Value k
+  | Update Key Delta k
   | Get Key (Value -> k)
   | Reset k deriving(Functor)
 
@@ -235,6 +237,7 @@ get k = liftF $ Get k id
 
 data CoDSLF k = CoDSLF {
   setH :: Key -> Value -> k,
+  deltaH :: Key -> Delta -> k,
   getH :: Key -> (Int, k),
   resetH :: k
 } deriving(Functor)
@@ -246,7 +249,7 @@ type CoDSL = Cofree CoDSLF
 mkCoDSL :: CoDSL (M.Map Key Value)
 mkCoDSL = coiter next start
   where
-    next w = CoDSLF (coSet w) (coGet w) (coClear w)
+    next w = CoDSLF (coSet w) (coUpdate w) (coGet w) (coClear w)
     start = M.empty
 
 coClear :: M.Map Key Value -> M.Map Key Value
@@ -260,13 +263,18 @@ coGet m k = let v =  case m M.!? k of
                         Just v -> v
                         Nothing -> 1
             in (v, m)
+coUpdate :: M.Map Key Value -> Key -> Delta -> M.Map Key Value
+coUpdate m k d = if M.member k m 
+                  then M.update (Just . (+ d)) k m
+                  else M.insert k d m
 
 
 -- set key v :: k
 instance Pairing CoDSLF DSLF where
-  pair f (CoDSLF set _ _) (Set key v k) = f (set key v) k
-  pair f (CoDSLF _ get _) (Get key k) = pair f (get key) k
-  pair f (CoDSLF _ _ reset) (Reset k) = f reset k
+  pair f (CoDSLF set _ _ _) (Set key v k) = f (set key v) k
+  pair f (CoDSLF _ update _ _) (Update key d k) = f (update key d) k
+  pair f (CoDSLF _ _ get _) (Get key k) = pair f (get key) k
+  pair f (CoDSLF _ _ _ reset) (Reset k) = f reset k
 
 
 double :: DSL ()
@@ -292,6 +300,7 @@ testLimit = runLimit mkCoDSL
 
 
 -- TODO: incrementalize a given interpreter.
+-- Figure out how to make the update incremental.
 incremental :: (Diff a, b ~ Patch a) => Cofree f a -> Cofree f b
 incremental = undefined
 
