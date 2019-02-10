@@ -9,6 +9,9 @@
 - [Free and Cofree for interpreters](http://abailly.github.io/posts/free.html)
 - [Cofree meets Free](http://blog.sigfpe.com/2014/05/cofree-meets-free.html)
 - [Entropy as information loss](https://johncarlosbaez.wordpress.com/2011/06/02/a-characterization-of-entropy/)
+- [Categorical theory of patches](https://arxiv.org/pdf/1311.3903.pdf)
+- [Partial monoids](https://arxiv.org/pdf/1002.2166.pdf)
+- [Arrows and static ananlysis](https://elvishjerricco.github.io/2017/03/10/profunctors-arrows-and-static-analysis.html)
 
 # To do
 - Derive pretty `show` instances for the deltas to aid debugging

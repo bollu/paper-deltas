@@ -169,13 +169,26 @@ We first begin with our GHC incantations:
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE GADTs  #-}
+import Prelude hiding ((.))
 import Data.Monoid
+import Control.Arrow
+import Control.Category
 import Generics.Eot
 import GHC.Generics
 import Language.Haskell.TH
+import qualified Data.Text.Prettyprint.Doc as P
+import qualified Data.Text.Prettyprint.Doc.Util as P
+import qualified Data.Text.Prettyprint.Doc.Render.String as P
 import qualified WorkingGenerics as WG
+import qualified Data.FingerTree as FT
+import qualified Data.LCA.Online as LCA
 
 \end{code}
+Helpers for pretty printing
 
 Next, we define the typeclass which we will constantly end up using:
 \begin{code}
@@ -437,6 +450,106 @@ deltarr = gdiff r2 r3
 
 \end{code}
 
+\section{Checkpoints}
+
+Now that we have the infrastructure to talk about diffs, we can now
+recreate certain well-known patterns with this machinery: One of them
+being that of the command pattern, which allows for undo and redo-ing
+of operations. An implementation would be:
+
+\begin{code}
+-- time of creation. TODO: should wrap some kind of non
+-- monotonic structure.
+newtype Time = Time { unTime :: Int } deriving(Show)
+incrTime :: Time -> Time
+incrTime (Time i) = Time (i + 1)
+
+instance P.Pretty Time where
+    pretty (Time t) = P.pretty "t" <> P.pretty t
+
+instance {-# OVERLAPS #-} P.Pretty a => Show a where
+    show a = let doc = P.layoutPretty P.defaultLayoutOptions (P.pretty a)
+        in P.renderString doc
+
+data ChkTrace a = ChkTrace !Time !(LCA.Path a)
+
+instance P.Pretty a => P.Pretty (ChkTrace a) where
+    pretty (ChkTrace time path) = 
+        P.vcat [P.pretty time, P.vcat $ map P.pretty (LCA.toList path)]
+
+
+newChkTrace :: ChkTrace a
+newChkTrace = ChkTrace (Time 0) LCA.empty
+
+consChkTrace :: a -> ChkTrace a -> ChkTrace a
+consChkTrace a (ChkTrace t p) = 
+    let p' = LCA.cons (unTime t) a p
+        t' = incrTime t
+    in ChkTrace t' p'
+
+data ChkInstrs a where
+    -- sequences two computations 
+    ISequence :: ChkInstrs a  -> ChkInstrs a  -> ChkInstrs a
+    -- takes an instruction and checkpoints the final value.
+    -- This can be extracted out after running the computation.
+    IChk :: ChkInstrs a
+    -- branches off the computations
+    IBranch :: ChkInstrs a -> ChkInstrs a -> ChkInstrs a
+    -- computes a pure function over the computation.
+    ICompute :: (a -> a) -> ChkInstrs a
+
+instance P.Pretty (ChkInstrs a) where
+    pretty (ISequence a b) = P.vsep [P.pretty a, P.pretty b]
+    pretty (IBranch a b) = P.vsep [P.pretty a, P.pretty b]
+    pretty (IChk) = P.pretty "CHK"
+    pretty (ICompute f) = P.pretty "compute"
+
+
+
+-- run it using the most naive algorithm possible
+runChkInstrsNaive :: a -> ChkInstrs a -> (a, ChkTrace a)
+runChkInstrsNaive a i  = 
+    let go :: a -> ChkInstrs a -> ChkTrace a -> (a, ChkTrace a)
+        go a (ICompute f) tr = (f a, tr)
+        go a (IChk) tr = (a, consChkTrace a tr)
+        go a (ISequence i i') tr = 
+            let (a', tr') = go a i tr in go a' i' tr'
+        go a (IBranch i i') tr = 
+            let (_, tr') = go a i tr in go a i' tr'
+
+    in go a i newChkTrace
+
+seqChkInstrs :: [ChkInstrs a] -> ChkInstrs a
+seqChkInstrs (xs) = foldl1 ISequence xs
+
+chkInstrsProg1 :: ChkInstrs String
+chkInstrsProg1 = seqChkInstrs [IChk, ICompute (++ "-a-"), IChk, ICompute (++ "-b-"), IChk]
+
+exampleChkInstrsProg1 :: IO ()
+exampleChkInstrsProg1 = do
+    let (out, tr) = runChkInstrsNaive "start-" chkInstrsProg1
+    putStrLn "program:"
+    pprprint chkInstrsProg1
+    putStrLn "out:"
+    pprprint out
+    putStrLn "trace:"
+    pprprint tr
+\end{code}
+
+
+
+\section{Efficient encoding of deltas}
+Till now, we have not actually discussed the cost of these encodings. 
+However, we now have the ability to do so. Our main tool will be
+to exploit the sparsity of the representation of deltas to decide
+their encoding. For this task, we will reserve $c$ bits, where $c$
+is the number of components in the delta. These will tell us if
+the $i$th component has changed in the representation. Indeed, one
+could imagine alternate representations. One can choose to generalize
+over all possible representations using a Huffman code, but we shall not
+do so here.
+
+
 
 \section{Invertible diffs}
 \begin{code}
@@ -452,8 +565,15 @@ class (MonoidTorsor g s, GroupAction g s) => GroupTorsor g s | s -> g where
 \end{code}
 
 \begin{code}
+pprprint :: P.Pretty a => a -> IO ()
+pprprint a = do 
+    P.putDocW 80 . P.pretty $ a
+    putStrLn ""
+
 main :: IO ()
-main = WG.main
+main = do
+    exampleChkInstrsProg1
+    WG.main
 \end{code}
 
 
