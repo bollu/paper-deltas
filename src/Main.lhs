@@ -179,13 +179,14 @@ import Control.Arrow
 import Control.Category
 import Generics.Eot
 import GHC.Generics
-import Language.Haskell.TH
+import qualified Language.Haskell.TH as TH
 import qualified Data.Text.Prettyprint.Doc as P
 import qualified Data.Text.Prettyprint.Doc.Util as P
 import qualified Data.Text.Prettyprint.Doc.Render.String as P
 import qualified WorkingGenerics as WG
 import qualified Data.FingerTree as FT
 import qualified Data.LCA.Online as LCA
+import qualified Data.LCA.View as LCA
 
 \end{code}
 Helpers for pretty printing
@@ -471,69 +472,83 @@ instance {-# OVERLAPS #-} P.Pretty a => Show a where
     show a = let doc = P.layoutPretty P.defaultLayoutOptions (P.pretty a)
         in P.renderString doc
 
-data ChkTrace a = ChkTrace !Time !(LCA.Path a)
+-- | Collects the last timestamp used, the current saved path, and the current value being used
+data ChkTrace a = ChkTrace !Time !(LCA.Path a) a
 
 instance P.Pretty a => P.Pretty (ChkTrace a) where
-    pretty (ChkTrace time path) = 
-        P.vcat [P.pretty time, P.vcat $ map P.pretty (LCA.toList path)]
+    pretty (ChkTrace time path a) = P.vcat $ map P.pretty (LCA.toList path)
 
 
-newChkTrace :: ChkTrace a
-newChkTrace = ChkTrace (Time 0) LCA.empty
+newChkTrace :: a -> ChkTrace a
+newChkTrace a = ChkTrace (Time 0) LCA.empty a
 
-consChkTrace :: a -> ChkTrace a -> ChkTrace a
-consChkTrace a (ChkTrace t p) = 
-    let p' = LCA.cons (unTime t) a p
-        t' = incrTime t
-    in ChkTrace t' p'
+-- | Compute a new value from the value at the tip of the chkTrace
+computeTipChkTrace :: (a -> a) -> ChkTrace a -> ChkTrace a
+computeTipChkTrace f (ChkTrace t p a) =  ChkTrace t p (f a)
 
-data ChkInstrs a where
+-- | save the tip / commit the tip to memory
+saveTipChkTrace :: ChkTrace a -> ChkTrace a
+saveTipChkTrace (ChkTrace t p a) = 
+    let t' = incrTime t
+        p' = LCA.cons (unTime t) a p
+    in ChkTrace t' p' a
+
+data ChkInstr a where
     -- sequences two computations 
-    ISequence :: ChkInstrs a  -> ChkInstrs a  -> ChkInstrs a
+    ISequence :: ChkInstr a  -> ChkInstr a  -> ChkInstr a
     -- takes an instruction and checkpoints the final value.
     -- This can be extracted out after running the computation.
-    IChk :: ChkInstrs a
+    IChk :: ChkInstr a
     -- branches off the computations
-    IBranch :: ChkInstrs a -> ChkInstrs a -> ChkInstrs a
+    IBranch :: ChkInstr a -> ChkInstr a -> ChkInstr a
     -- computes a pure function over the computation.
-    ICompute :: (a -> a) -> ChkInstrs a
+    ICompute :: (a -> a) -> ChkInstr a
 
-instance P.Pretty (ChkInstrs a) where
-    pretty (ISequence a b) = P.vsep [P.pretty a, P.pretty b]
+instance P.Pretty (ChkInstr a) where
+    pretty (ISequence a b) = P.hsep [P.pretty a, P.pretty b]
     pretty (IBranch a b) = P.vsep [P.pretty a, P.pretty b]
     pretty (IChk) = P.pretty "CHK"
     pretty (ICompute f) = P.pretty "compute"
 
 
-
 -- run it using the most naive algorithm possible
-runChkInstrsNaive :: a -> ChkInstrs a -> (a, ChkTrace a)
-runChkInstrsNaive a i  = 
-    let go :: a -> ChkInstrs a -> ChkTrace a -> (a, ChkTrace a)
-        go a (ICompute f) tr = (f a, tr)
-        go a (IChk) tr = (a, consChkTrace a tr)
-        go a (ISequence i i') tr = 
-            let (a', tr') = go a i tr in go a' i' tr'
-        go a (IBranch i i') tr = 
-            let (_, tr') = go a i tr in go a i' tr'
+runChkInstrsNaive :: ChkInstr a -> a -> [ChkTrace a]
+runChkInstrsNaive i  a = go i [newChkTrace a] where
+    go :: ChkInstr a -> [ChkTrace a] -> [ChkTrace a]
+    go (ICompute f) trs =  map (computeTipChkTrace f) trs
+    go (IChk) trs =  map saveTipChkTrace trs
+    go (ISequence i i') trs = go i' . go i $ trs 
+    go (IBranch i i') trs =  (go i trs) ++ (go i' trs)
 
-    in go a i newChkTrace
+runChkInstrsDelta :: Diff a p => a -> ChkInstr a -> (a, ChkTrace p)
+runChkInstrsDelta a i = undefined
 
-seqChkInstrs :: [ChkInstrs a] -> ChkInstrs a
+seqChkInstrs :: [ChkInstr a] -> ChkInstr a
 seqChkInstrs (xs) = foldl1 ISequence xs
 
-chkInstrsProg1 :: ChkInstrs String
+chkInstrsProg1 :: ChkInstr String
 chkInstrsProg1 = seqChkInstrs [IChk, ICompute (++ "-a-"), IChk, ICompute (++ "-b-"), IChk]
 
-exampleChkInstrsProg1 :: IO ()
-exampleChkInstrsProg1 = do
-    let (out, tr) = runChkInstrsNaive "start-" chkInstrsProg1
-    putStrLn "program:"
-    pprprint chkInstrsProg1
-    putStrLn "out:"
-    pprprint out
-    putStrLn "trace:"
-    pprprint tr
+
+chkInstrsProg2 :: ChkInstr String
+chkInstrsProg2 = seqChkInstrs [IChk, ICompute (++ "-a-"), IChk, 
+    IBranch (seqChkInstrs [ICompute (++ "-b1-"), IChk]) (seqChkInstrs [ICompute (++ "-b2-"), IChk])]
+
+
+runChkProgram :: P.Pretty a => String -> ChkInstr a -> a -> IO ()
+runChkProgram name p start = do
+    putStrLn $ "===" ++ "running program: " ++ name ++ "==="
+    let trs = runChkInstrsNaive p start
+    pprint p
+
+    putStrLn "* trace:"
+    pprint trs
+
+runChkPrograms :: IO ()
+runChkPrograms = do
+    runChkProgram "prog1" chkInstrsProg1 "start-"
+    runChkProgram "prog2" chkInstrsProg2 "start-"
+
 \end{code}
 
 
@@ -565,14 +580,15 @@ class (MonoidTorsor g s, GroupAction g s) => GroupTorsor g s | s -> g where
 \end{code}
 
 \begin{code}
-pprprint :: P.Pretty a => a -> IO ()
-pprprint a = do 
+-- | pretty print
+pprint :: P.Pretty a => a -> IO ()
+pprint a = do 
     P.putDocW 80 . P.pretty $ a
     putStrLn ""
 
 main :: IO ()
 main = do
-    exampleChkInstrsProg1
+    runChkPrograms
     WG.main
 \end{code}
 
