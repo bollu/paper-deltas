@@ -321,6 +321,7 @@ instance Monoid Void where
     mempty = undefined
     v `mappend` _ = absurd v
     
+
 instance MonoidAction Void Void where
     mact v = absurd v
 
@@ -472,26 +473,35 @@ instance {-# OVERLAPS #-} P.Pretty a => Show a where
     show a = let doc = P.layoutPretty P.defaultLayoutOptions (P.pretty a)
         in P.renderString doc
 
--- | Collects the last timestamp used, the current saved path, and the current value being used
-data ChkTrace a = ChkTrace !Time !(LCA.Path a) a
+-- | TODO: think of the invariants here. Do we want to start with knowing
+-- | the first value? I think we do
+-- | Collects the last timestamp used, the current saved path in terms
+-- | of a path of @s@, the previous @a@ value that was used to create the
+-- | @s@ at the tip of the path,  and the current value being used @a@
+data ChkTrace s a = ChkTrace !Time !(LCA.Path s) a a
 
-instance P.Pretty a => P.Pretty (ChkTrace a) where
-    pretty (ChkTrace time path a) = P.vcat $ map P.pretty (LCA.toList path)
+instance (P.Pretty s, P.Pretty a) => P.Pretty (ChkTrace s a) where
+    pretty (ChkTrace time path _ _) = P.vcat $ map P.pretty (LCA.toList path)
 
 
-newChkTrace :: a -> ChkTrace a
-newChkTrace a = ChkTrace (Time 0) LCA.empty a
+newChkTrace :: s -> a -> ChkTrace s a
+newChkTrace s a = ChkTrace (Time 1) (LCA.cons 0 s LCA.empty) a a
 
 -- | Compute a new value from the value at the tip of the chkTrace
-computeTipChkTrace :: (a -> a) -> ChkTrace a -> ChkTrace a
-computeTipChkTrace f (ChkTrace t p a) =  ChkTrace t p (f a)
+computeTipChkTrace :: (a -> a) -> ChkTrace s a -> ChkTrace s a
+computeTipChkTrace f (ChkTrace t p mprev a) =  ChkTrace t p mprev (f a)
 
+-- | TODO: think of tradeoff. We can either only keep deltas
+-- | and recompute the current "last known previous value" based on deltas?
 -- | save the tip / commit the tip to memory
-saveTipChkTrace :: ChkTrace a -> ChkTrace a
-saveTipChkTrace (ChkTrace t p a) = 
+saveTipChkTrace :: (a -> a -> s)  -- Compute the current tip as a function 
+                                        -- of the *previous value* and the *current value*
+    -> ChkTrace s a 
+    -> ChkTrace s a
+saveTipChkTrace f (ChkTrace t p aprev a) = 
     let t' = incrTime t
-        p' = LCA.cons (unTime t) a p
-    in ChkTrace t' p' a
+        p' = LCA.cons (unTime t) (f aprev a) p
+    in ChkTrace t' p' a a
 
 data ChkInstr a where
     -- sequences two computations 
@@ -512,16 +522,26 @@ instance P.Pretty (ChkInstr a) where
 
 
 -- run it using the most naive algorithm possible
-runChkInstrsNaive :: ChkInstr a -> a -> [ChkTrace a]
-runChkInstrsNaive i  a = go i [newChkTrace a] where
-    go :: ChkInstr a -> [ChkTrace a] -> [ChkTrace a]
+runChkInstrsNaive :: ChkInstr a -> a -> [ChkTrace a a]
+runChkInstrsNaive i  a = go i [newChkTrace a a] where
+    go :: ChkInstr a -> [ChkTrace a a] -> [ChkTrace a a]
     go (ICompute f) trs =  map (computeTipChkTrace f) trs
-    go (IChk) trs =  map saveTipChkTrace trs
+    go (IChk) trs =  map (saveTipChkTrace (\_ a -> a)) trs
     go (ISequence i i') trs = go i' . go i $ trs 
     go (IBranch i i') trs =  (go i trs) ++ (go i' trs)
 
-runChkInstrsDelta :: Diff a p => a -> ChkInstr a -> (a, ChkTrace p)
-runChkInstrsDelta a i = undefined
+-- Reminder when I come back:
+-- DISABLE CODE, ENABLE ONCE I IMPORT CORRECT DELTA IMPLEMENTATION
+-- run the machinery if Diff is available.
+runChkInstrsDelta :: (Monoid p, GDiff a p) => a -> ChkInstr a -> [ChkTrace p a]
+runChkInstrsDelta a i = go i [newChkTrace mempty a] where
+    -- go :: ChkInstr a -> [ChkTrace p a] -> [ChkTrace p a] 
+    go (ICompute f) trs = map (computeTipChkTrace f) trs
+    go (IChk) trs =  map (saveTipChkTrace (\aprev a -> gdiff a aprev)) trs
+    go (ISequence i i') trs = go i' . go i $ trs 
+    go (IBranch i i') trs =  (go i trs) ++ (go i' trs)
+
+    
 
 seqChkInstrs :: [ChkInstr a] -> ChkInstr a
 seqChkInstrs (xs) = foldl1 ISequence xs
