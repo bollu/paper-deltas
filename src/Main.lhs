@@ -173,12 +173,16 @@ We first begin with our GHC incantations:
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE GADTs  #-}
+{-# LANGUAGE EmptyCase  #-}
+{-# LANGUAGE TypeOperators  #-}
+{-# LANGUAGE AllowAmbiguousTypes  #-}
 import Prelude hiding ((.))
 import Data.Monoid
 import Control.Arrow
 import Control.Category
-import Generics.Eot
+-- import Generics.Eot
 import GHC.Generics
+import GHC.Exts (Constraint)
 import qualified Language.Haskell.TH as TH
 import qualified Data.Text.Prettyprint.Doc as P
 import qualified Data.Text.Prettyprint.Doc.Util as P
@@ -192,25 +196,6 @@ import qualified Data.LCA.View as LCA
 Helpers for pretty printing
 
 Next, we define the typeclass which we will constantly end up using:
-\begin{code}
--- forall s. mact mempty s = s
--- forall m1 m2 s. (m1 <> m2) <>> s = m2 <>> (m1 <>> s)
-class Monoid m => MonoidAction m s  |  m -> s where
-    mact :: m -> s -> s
-    mact = (<>>)
-    -- (<>>) :: MonoidAction m s => m -> s -> s
-    (<>>) :: m -> s -> s
-    (<>>) = mact
-
-
--- forall s. mdelta s s = mempty
--- forall s1 s2. (s2 <-> s1) <>> s1 = s2
-class MonoidAction m s => MonoidTorsor m s | m -> s where
-    mdelta :: s -> s -> m
-    mdelta = (<->)
-    (<->) :: s -> s -> m
-    (<->) = mdelta
-\end{code}
 
 Now that we have defined a space that is able to support monoidal structures
 over it, we begin to motivate this. We first introduce some terminology. We
@@ -230,20 +215,6 @@ We construct a family of useful operators around this object.
 
 % why default data family instances do not make sense
 % https://stackoverflow.com/questions/18965939/data-family-default-instances
-\begin{code}
-type family Patch a = p | p -> a
-type family GGPatch a = p | p -> a
--- GHC.Generic version of diff
-class (Monoid p, MonoidAction p a, MonoidTorsor p a) => GGDiff a p | p -> a where
--- Generic version of diff
-class (Monoid p, MonoidAction p a, MonoidTorsor p a) => GDiff a p | p -> a where
--- Concrete version of Diff
-class (Monoid p, MonoidAction p a, MonoidTorsor p a) => Diff a p | p -> a where
-
-
-instance (Monoid p, MonoidAction p x, MonoidTorsor p x, GDiff x p) => Diff x p
-
-\end{code}
 
 We now have a class \hsmint{Diff}, which represents a type that
 has a structure which can be diffed. We have an associated data
@@ -255,202 +226,132 @@ then instantiate the boilerplate for the correct \hsmint{Monoid},
 We now use the \texttt{Generics} support in haskell to construct a method
 to derive the \hsmint{Diff} instance for any algebraic data type.
 
-% https://generics-eot.readthedocs.io/en/stable/tutorial.html
 \begin{code}
--- class (p ~ Patch a) => Diff a p where
---     patchempty :: Patch a
---     patchappend :: p -> p -> p
---     diff :: a -> a -> p
---     patch :: p -> a -> a
+data Void  deriving(Generic)
+absurd :: Void -> a
+absurd v = case v of
 
-data EitherPatch a b pa pb = PL a | PR b | PPL pa | PPR pb deriving(Show)
+-- data Dict :: Constraint -> * where
+--   Dict :: a => Dict a
 
-instance (Monoid pa, Monoid pb) => Monoid (EitherPatch a b pa pb) where
-    mempty = PPL mempty
-    mappend _ (PL a) = (PL a)
-    mappend _ (PR b) = (PR b)
-    mappend (PPL pa) (PPL pa') = PPL (pa <> pa')
-    mappend (PPR pb) (PPR pb') = PPR (pb <> pb')
-    mappend x y = error $ "unable to combine patches!"
+-- instance Show (Dict a) where
+--   show = const "dict"
 
+class Diff a  where
+  type family Patch a :: *
+  type Patch a = GPatch (Rep a) a
 
-instance (MonoidAction pa a, MonoidAction pb b) => 
-    MonoidAction (EitherPatch a b pa pb) (Either a b) where
-    mact (PL a) _ = Left a
-    mact (PR b) _ = Right b
-    mact (PPL pa) (Left a)  = Left (pa <>> a)
-    mact (PPR pb) (Right b)  = Right (pb <>> b)
+  diff :: a -> a -> Patch a
+  default diff :: (Generic a, GDiff (Rep a), Patch a ~ (GPatch (Rep a)) a) => a -> a -> Patch a
+  diff a a' = gdiff (from a) (from a')
 
+class GDiff (gen :: * -> *)  where
+  type family GPatch gen :: * -> *
+  gdiff :: gen a -> gen a -> (GPatch gen) a
 
-instance (MonoidTorsor pa a, MonoidTorsor pb b) => MonoidTorsor (EitherPatch a b pa pb) (Either a b) where
-    mdelta (Left a) (Left a') = PPL (mdelta a a')
-    mdelta (Right b) (Right b') = PPR (mdelta  b b')
-    mdelta (Left _) (Right b) = PR b
-    mdelta (Right _) (Left a) = PL a
+instance GDiff V1 where
+  type GPatch V1 = V1 
+  gdiff v1 _ = undefined
 
+instance GDiff U1 where
+  type GPatch U1 = U1
+  gdiff u1 u1' = u1
 
-type instance Patch (Either a b) = EitherPatch a b (Patch a) (Patch b)
-type instance GGPatch (Either a b) = EitherPatch a b (GGPatch a) (GGPatch b)
-instance (GDiff a pa, GDiff b pb) => GDiff (Either a b) (EitherPatch a b pa pb) where
-
-
-type instance Patch () = ()
-type instance GGPatch () = ()
-
-instance MonoidAction () () where
-    mact () () = ()
-
-instance MonoidTorsor () () where
-    mdelta () () = ()
-
-instance GDiff () () where
-
-type instance Patch (x, xs) = (Patch x, Patch xs)
-type instance GGPatch (x, xs) = (GGPatch x, GGPatch xs)
-instance (MonoidAction pa a, MonoidAction pb b) => MonoidAction (pa, pb) (a, b) where
-    mact (p, p') (x, x') = (mact p x, mact p' x')
-
-instance (MonoidTorsor pa a, MonoidTorsor pb b) => MonoidTorsor (pa, pb) (a, b) where
-    mdelta (x1, x1') (x2, x2') = (mdelta x1 x2, mdelta x1' x2')
-
-instance (GDiff x p , GDiff y q) => GDiff (x, y) (p, q)
-
-type instance Patch Void = Void
-type instance GGPatch Void = Void
-instance Monoid Void where
-    mempty = undefined
-    v `mappend` _ = absurd v
-    
-
-instance MonoidAction Void Void where
-    mact v = absurd v
-
-instance MonoidTorsor Void Void where
-    v <-> _  = absurd v
-
-instance GDiff Void Void
-
--- Trying to get the type system to give me an instance of Diff
--- from an instance of GenericDiff. Woe is me
--- instance (GenericDiff a, HasEot a, Patch (Eot a) ~ p) => Diff a (Patch (Eot a)) where
-
-gdiff :: (HasEot a,  GDiff (Eot a) (Patch (Eot a))) => a -> a -> Patch (Eot a)
-gdiff a a' = (toEot a) <-> (toEot a')
-
--- ggdiff :: (Repr a,  GGDiff (Rep a) (GGPatch (Rep a))) => a -> a -> GGPatch (Rep a)
--- ggdiff a a' = (rep a) <-> (rep a')
+-- products
+instance (GDiff f, GDiff g) => GDiff (f :*: g) where
+  type GPatch (f :*: g) = (GPatch f :*: GPatch g) 
+  gdiff (f :*: g) (f' :*: g') = (gdiff f f') :*: (gdiff g g')
 
 
-gpatch :: (HasEot a, GDiff (Eot a) (Patch (Eot a))) => Patch (Eot a) -> a -> a
-gpatch pa a = fromEot $  pa <>> toEot a
+instance (GDiff f, GDiff g) => GDiff (f :+: g)  where
+  type GPatch (f :+: g) = (f :+: g :+: GPatch f :+: GPatch g)
+  gdiff (L1 f) (L1 f') = R1 (R1 (L1 (gdiff f f')))
+  gdiff (R1 g) (R1 g') = R1 (R1 (R1 (gdiff g g')))
+  gdiff (L1 f) (R1 g) = (L1 f)
+  gdiff (R1 g) (L1 f) = R1 (L1 g)
 
+-- meta info, we simply tunnel through
+instance (GDiff f) => GDiff (M1 i t f)  where
+  type GPatch (M1 i t f) =  M1 i t (GPatch f)
+  gdiff (M1 x) (M1 x') = M1 $ gdiff x x'
+
+
+-- recursion
+instance (Diff f) => GDiff (K1 i f) where
+   type GPatch (K1 i f) = (K1 i (Patch f))
+   gdiff (K1 x) (K1 x') = K1 $ diff x x'
+
+instance Diff () 
+instance Diff Void 
+instance (Diff a, Diff b) => Diff (a, b) 
+instance (Diff a, Diff b) => Diff (Either a b)
+
+-- type instance DT Int = (NumDelta Int)
+data NumDelta a = NumDelta a deriving(Show)
+
+
+instance Diff Int  where
+  type Patch Int = (NumDelta Int)
+  diff a b =  NumDelta $ b - a
+
+  
+data Ctor a = Ctor a deriving(Generic, Show)
+data Ctor2 a = Ctor2 a deriving(Generic, Show)
+
+instance (Diff a) => Diff (Ctor a) 
+
+data And = And () () deriving(Generic, Show)
+data And2 = And2 () () deriving(Generic, Show)
+instance Diff And
+
+data Or = One | Two deriving (Generic, Show)
+data Or2 = One2 | Two2 | Three2 deriving(Generic, Show)
+data OrDiff = OneOne | OneTwo | TwoOne | TwoTwo deriving(Generic, Show)
+instance Diff Or 
+
+data Stream a = a :< (Stream a) deriving(Generic, Show)
+
+-- TODO: allow this derivation to work automatically
+-- instead of getting stuck
+-- instance Diff (Stream a)
+instance Diff a => Diff (Stream a) where
+  type Patch (Stream a) = Stream (Patch a)
+  diff (x:<xs) (x':<xs') = (diff x x'):<(diff xs xs')
+
+
+instance Diff a => Diff [a] where
+  type Patch [a] = [Patch a]
+  diff (x:xs) (x':xs') = (diff x x'):(diff xs xs')
+
+x :: Int
+x = 3
+
+y :: Int
+y = 4
+
+dxy :: NumDelta Int
+dxy = diff x y
+
+
+-- dxxyy :: (NumDelta Int, NumDelta Int)
+dxxyy = diff (x, x) (y, y)
+
+data Four a b c d = LL a | LR b | RL c | RR d
+
+l :: Either Int Int
+l = Left 4
+
+r :: Either Int Int
+r = Right 10
+
+dlr = diff l r
+
+
+-- Step 2: We want nice ways to render the deltas.
+showPatch :: Diff a => Patch a -> String
+showPatch = undefined
 \end{code}
 
-\section{Diff using GHC Generics so I can work on recursive types}
-
-
-
-\section{Custom Diff instance for numbers}
-\begin{code}
-newtype NumDelta a = NumDelta a deriving(Eq, Show, Ord)
-type instance Patch Int = NumDelta Int
-instance Num a => Monoid (NumDelta a) where
-    mappend (NumDelta a) (NumDelta b) = NumDelta $ a + b
-    mempty = NumDelta 0
-
-instance Num a => MonoidAction (NumDelta a) a where
-    NumDelta a <>> b = a + b
-
-instance Num a => MonoidTorsor (NumDelta a) a where
-    a <-> b = NumDelta (a - b)
-
-instance Num a => Diff a (NumDelta a)
-instance Num a => GDiff a (NumDelta a)
-\end{code}
-
-\section{Diffs for recursive types}
-
-\section{Efficient diffs exploiting sparsity}
-
-
-% https://github.com/RafaelBocquet/haskell-mgeneric/
-\section{Simple uses of code}
-\begin{code}
-data Foo = FooL { ca :: (), cb :: () } | 
-    FooR {cc :: Int, cd :: ()} deriving(Show, Generic)
-data Bar a = Bar a deriving(Show, Generic)
--- The fact that a new Data declaration works strongly suggests
--- that my type family should become a data family.
-
--- This is fucked, because EOT cannot do recursive types properly.
--- I need to switch to GHC generics, it looks like :(
-data Nat = Z | S (Nat) deriving(Show, Generic)
-
-{--
-*Main> :kind! (Patch (Eot Nat))
-(Patch (Eot Nat)) :: *
-= EitherPatch
-    ()
-    (Either (Nat, ()) Void)
-    ()
-    (EitherPatch (Nat, ()) Void (Patch Nat, ()) Void)
-
-This is a problem, because "Patch (Eot Nat)" refers to "Patch Nat".
-I can't equationally define "Patch Nat = Patch (Eot Nat)" because GHC
-reasons, so I think I will need to jump GHC generics hoops.
---}
-
-n1 :: Nat
-n1 = S Z
-n2 :: Nat
-n2 = S (S Z)
-
--- diffn1n2 = gdiff n1 n2
-
-
-el :: Either () ()
-el = Left ()
-
-er :: Either () ()
-er = Right ()
-
-diffeler = gdiff el el
-
-foo1 = FooL () ()
-foo2 = FooR 5 ()
-
-difffoo1foo1 = gdiff foo1 foo1
-difffoo1foo2 = gdiff foo1 foo2
- 
-deltaint :: NumDelta Int
-deltaint = 4 <-> 5
-
-
--- deltatuple :: NumDelta (Int, Int)
-deltatuple = gdiff (3 :: Int, 2 :: Int) (2, 3)
-
-
-l2 :: Either Int Int
-l2 = Left 2
-
-
-l3 :: Either Int Int
-l3 = Left 3
-
-
-r2 :: Either Int Int
-r2 = Right 2
-
-r3 :: Either Int Int
-r3 = Right 3
-
-
-deltall = gdiff l2 l3
-deltalr = gdiff l2 r3
-deltarl = gdiff r2 l3
-deltarr = gdiff r2 r3
-
-\end{code}
 
 \section{Checkpoints}
 
@@ -533,11 +434,11 @@ runChkInstrsNaive i  a = go i [newChkTrace a a] where
 -- Reminder when I come back:
 -- DISABLE CODE, ENABLE ONCE I IMPORT CORRECT DELTA IMPLEMENTATION
 -- run the machinery if Diff is available.
-runChkInstrsDelta :: (Monoid p, GDiff a p) => a -> ChkInstr a -> [ChkTrace p a]
+runChkInstrsDelta :: (Monoid (Patch a), Diff a) => a -> ChkInstr a -> [ChkTrace (Patch a) a]
 runChkInstrsDelta a i = go i [newChkTrace mempty a] where
-    -- go :: ChkInstr a -> [ChkTrace p a] -> [ChkTrace p a] 
+    -- go :: ChkInstr a -> [ChkTrace (Patch a) a] -> [ChkTrace (Patch a) a] 
     go (ICompute f) trs = map (computeTipChkTrace f) trs
-    go (IChk) trs =  map (saveTipChkTrace (\aprev a -> gdiff a aprev)) trs
+    go (IChk) trs =  map (saveTipChkTrace (\aprev a -> diff a aprev)) trs
     go (ISequence i i') trs = go i' . go i $ trs 
     go (IBranch i i') trs =  (go i trs) ++ (go i' trs)
 
@@ -584,20 +485,6 @@ could imagine alternate representations. One can choose to generalize
 over all possible representations using a Huffman code, but we shall not
 do so here.
 
-
-
-\section{Invertible diffs}
-\begin{code}
-class Monoid g => Group g where
-    ginv :: g -> g
-
--- add new laws
-class (Group g, MonoidAction g s) => GroupAction g s | s -> g where
-
-
--- add new laws
-class (MonoidTorsor g s, GroupAction g s) => GroupTorsor g s | s -> g where
-\end{code}
 
 \begin{code}
 -- | pretty print
