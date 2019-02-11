@@ -176,6 +176,7 @@ We first begin with our GHC incantations:
 {-# LANGUAGE EmptyCase  #-}
 {-# LANGUAGE TypeOperators  #-}
 {-# LANGUAGE AllowAmbiguousTypes  #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving  #-}
 import Prelude hiding ((.))
 import Data.Monoid
 import Control.Arrow
@@ -183,6 +184,7 @@ import Control.Category
 -- import Generics.Eot
 import GHC.Generics
 import GHC.Exts (Constraint)
+import Data.String.Utils
 import qualified Language.Haskell.TH as TH
 import qualified Data.Text.Prettyprint.Doc as P
 import qualified Data.Text.Prettyprint.Doc.Util as P
@@ -319,9 +321,10 @@ instance Diff a => Diff (Stream a) where
   diff (x:<xs) (x':<xs') = (diff x x'):<(diff xs xs')
 
 
-instance Diff a => Diff [a] where
-  type Patch [a] = [Patch a]
-  diff (x:xs) (x':xs') = (diff x x'):(diff xs xs')
+-- This 1. conflicts with string, 2. does not work properly.
+-- instance {-# OVERLAPS #-}  Diff a => Diff [a] where
+--   type Patch [a] = [Patch a]
+--   diff (x:xs) (x':xs') = (diff x x'):(diff xs xs')
 
 x :: Int
 x = 3
@@ -431,11 +434,8 @@ runChkInstrsNaive i  a = go i [newChkTrace a a] where
     go (ISequence i i') trs = go i' . go i $ trs 
     go (IBranch i i') trs =  (go i trs) ++ (go i' trs)
 
--- Reminder when I come back:
--- DISABLE CODE, ENABLE ONCE I IMPORT CORRECT DELTA IMPLEMENTATION
--- run the machinery if Diff is available.
-runChkInstrsDelta :: (Monoid (Patch a), Diff a) => a -> ChkInstr a -> [ChkTrace (Patch a) a]
-runChkInstrsDelta a i = go i [newChkTrace mempty a] where
+runChkInstrsDelta :: (Monoid (Patch a), Diff a) => ChkInstr a -> a -> [ChkTrace (Patch a) a]
+runChkInstrsDelta i a = go i [newChkTrace mempty a] where
     -- go :: ChkInstr a -> [ChkTrace (Patch a) a] -> [ChkTrace (Patch a) a] 
     go (ICompute f) trs = map (computeTipChkTrace f) trs
     go (IChk) trs =  map (saveTipChkTrace (\aprev a -> diff a aprev)) trs
@@ -465,10 +465,36 @@ runChkProgram name p start = do
     putStrLn "* trace:"
     pprint trs
 
+runChkProgramDelta :: 
+    (P.Pretty a, P.Pretty (Patch a), Diff a, Monoid (Patch a)) => String -> ChkInstr a -> a -> IO ()
+runChkProgramDelta name p start = do
+    putStrLn $ "===" ++ "running program: " ++ name ++ "==="
+    let trs = runChkInstrsDelta p start
+    pprint p
+
+    putStrLn "* trace:"
+    pprint trs
+
+
+newtype StrPrefix = StrPrefix String  deriving(Show, Monoid)
+instance P.Pretty StrPrefix where
+    pretty (StrPrefix s) = P.pretty "Prefix(" P.<> (P.pretty s) P.<> (P.pretty ")")
+
+-- crazy bad, terribly inefficient, implementation.
+instance Diff String where
+    type Patch String = StrPrefix
+    diff s s' = 
+        if startswith s' s'
+            then StrPrefix $ drop (length s') s
+            else error $ "s:" ++ s ++ "| s':" ++ s'
+        
+
 runChkPrograms :: IO ()
 runChkPrograms = do
     runChkProgram "prog1" chkInstrsProg1 "start-"
+    runChkProgramDelta "prog1" chkInstrsProg1 "start-"
     runChkProgram "prog2" chkInstrsProg2 "start-"
+    runChkProgramDelta "prog2" chkInstrsProg2 "start-"
 
 \end{code}
 

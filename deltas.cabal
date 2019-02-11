@@ -33,5 +33,6 @@ executable deltas
                        , lca
                        , flat-mcmc
                        , prettyprinter
+                       , MissingH
   hs-source-dirs:      src
   default-language:    Haskell2010
