@@ -241,7 +241,7 @@ data Void  deriving(Generic)
 absurd :: Void -> a
 absurd v = case v of
 
-class Diff a  where
+class Diff a where
   type family Patch a :: *
   type Patch a = GPatch (Rep a) a
 
@@ -250,10 +250,9 @@ class Diff a  where
   diff a a' = gdiff (from a) (from a')
 
   papply :: Patch a -> a -> a
+  default papply :: (Generic a, GDiff (Rep a), Patch a ~ (GPatch (Rep a)) a) => Patch a -> a -> a
+  papply p a = to (gpapply p (from a))
   -- default apply = undefined
-
-  -- empty patch
-  pempty :: Patch a
 
 -- operator for diff
 (<->) :: Diff a => a -> a -> Patch a
@@ -267,19 +266,24 @@ class Diff a  where
 class GDiff (gen :: * -> *)  where
   type family GPatch gen :: * -> *
   gdiff :: gen a -> gen a -> (GPatch gen) a
+  gpapply :: (GPatch gen) a -> gen a -> gen a
 
 instance GDiff V1 where
   type GPatch V1 = V1 
   gdiff v1 _ = undefined
 
+  gpapply v1 _ = undefined
+
 instance GDiff U1 where
   type GPatch U1 = U1
   gdiff u1 u1' = u1
+  gpapply u1 _ = u1
 
 -- products
 instance (GDiff f, GDiff g) => GDiff (f :*: g) where
   type GPatch (f :*: g) = (GPatch f :*: GPatch g) 
   gdiff (f :*: g) (f' :*: g') = (gdiff f f') :*: (gdiff g g')
+  gpapply (pf :*: pg) (f :*: g) = (gpapply pf f) :*: (gpapply pg g)
 
 
 instance (GDiff f, GDiff g) => GDiff (f :+: g)  where
@@ -289,10 +293,18 @@ instance (GDiff f, GDiff g) => GDiff (f :+: g)  where
   gdiff (L1 f) (R1 g) = (L1 f)
   gdiff (R1 g) (L1 f) = R1 (L1 g)
 
+  gpapply (L1 f) (R1 g) = L1 f 
+  gpapply (R1 (L1 g)) (L1 f) = R1 g
+
+  gpapply (R1 (R1 (L1 pf))) (L1 f) = L1 (gpapply pf f)
+  gpapply (R1 (R1 (R1 pg))) (R1 g) = R1 (gpapply pg g)
+
 -- meta info, we simply tunnel through
 instance (GDiff f) => GDiff (M1 i t f)  where
   type GPatch (M1 i t f) =  M1 i t (GPatch f)
   gdiff (M1 x) (M1 x') = M1 $ gdiff x x'
+
+  gpapply (M1 px) (M1 x) = M1 $ gpapply px x
 
 
 -- recursion
@@ -301,6 +313,8 @@ instance (GDiff f) => GDiff (M1 i t f)  where
 instance (Diff f) => GDiff (K1 i f) where
    type GPatch (K1 i f) = (K1 i (Patch f))
    gdiff (K1 x) (K1 x') = K1 $ diff x x'
+
+   gpapply (K1 p) (K1 x) = K1 $ papply p x
 
 
 -- Define Diff on free f a
@@ -311,6 +325,11 @@ instance (Functor f, Diff a) => Diff (Free f a) where
         a <- ffa
         a' <- ffa'
         return $ diff a a'
+
+    papply pfa ffa = do
+        p <- pfa
+        a <- ffa
+        return $ papply p a
 
 instance Diff () 
 instance Diff Void 
@@ -331,18 +350,20 @@ qcDiffApplyPatch :: (Diff a, Eq a, Arbitrary a, Show a) =>
     Proxy a -> String -> TestTree
 qcDiffApplyPatch proxy name = 
      QC.testProperty 
-        (name ++ ":b <-> a +$ a == b")
+        ("[" ++ name ++ "]: b <-> a +$ a == b")
         (diffApplyPatch proxy)
 
 -- Fucked, I need injectivity?
-applyPempty :: (Diff a, Eq a) => Proxy a -> a -> Bool
-applyPempty proxy a = pempty +$ a == a
+-- Looks like I need to use TemplateHaskell to generate unique instances.
+-- Oh well, I had to jump this ship sometime. Better now than never.
+applyPempty :: (Diff a, Eq a) => Proxy a -> Patch a -> a -> Bool
+applyPempty proxy pa a = (papply pa a) == a
 
-qcApplyPempty :: (Diff a, Eq a, Arbitrary a, Show a) =>
-    Proxy a -> String -> TestTree
-qcApplyPempty proxy name =
-    QC.testProperty (name ++ "pempty +$a == a")
-    (applyPempty proxy)
+-- qcApplyPempty :: (Diff a, Eq a, Arbitrary a, Show a) =>
+--     Proxy a -> String -> TestTree
+-- qcApplyPempty proxy name =
+--     QC.testProperty (name ++ "pempty +$a == a")
+--     (applyPempty proxy)
 
  
 \end{code}
@@ -358,7 +379,8 @@ data NumDelta a = NumDelta a deriving(Show)
 
 instance Diff Int  where
   type Patch Int = (NumDelta Int)
-  diff a b =  NumDelta $ b - a
+  diff a b =  NumDelta $ a - b
+  papply (NumDelta d) a = a + d
 
   
 data Ctor a = Ctor a deriving(Generic, Show)
@@ -383,6 +405,7 @@ data Stream a = a :< (Stream a) deriving(Generic, Show)
 instance Diff a => Diff (Stream a) where
   type Patch (Stream a) = Stream (Patch a)
   diff (x:<xs) (x':<xs') = (diff x x'):<(diff xs xs')
+  papply (px:<pxs) (x:<xs) = (papply px x):<(papply pxs xs)
 
 
 
@@ -567,9 +590,11 @@ instance P.Pretty StrPrefix where
 instance Diff String where
     type Patch String = StrPrefix
     diff s s' = 
-        if startswith s' s'
+        if startswith s' s
             then StrPrefix $ drop (length s') s
-            else error $ "s:" ++ s ++ "| s':" ++ s'
+            else error $ "s: |" ++ s ++ "|  s': |" ++ s' ++ "|"
+
+    papply (StrPrefix spr) s' = spr ++ s'
         
 
 runChkPrograms :: IO ()
@@ -695,8 +720,8 @@ tests :: IO ()
 tests = defaultMain $ testGroup "QuickCheck" 
             [qcDiffApplyPatch (Proxy :: Proxy Int) "Int"
             ,qcDiffApplyPatch (Proxy :: Proxy String) "String"
-            ,qcDiffApplyPatch (Proxy :: Proxy (Either Int String)) "Int | String"
-            ,qcDiffApplyPatch (Proxy :: Proxy (Either Int String)) "String"]
+            ,qcDiffApplyPatch (Proxy :: Proxy (Either Int Int)) "Either Int Int"
+            ]
 
 main :: IO ()
 main = do
