@@ -197,6 +197,7 @@ import qualified Data.LCA.Online as LCA
 import qualified Data.LCA.View as LCA
 -- Test harness
 import Test.Tasty
+import qualified Test.QuickCheck as QC
 import Test.Tasty.QuickCheck as QC
 import Test.QuickCheck.Modifiers (NonEmptyList (..))
 import Test.Tasty.HUnit
@@ -319,23 +320,41 @@ instance (Diff f) => GDiff (K1 i f) where
 
 
 -- Define Diff on free f a
-data Free f a = Leaf a | Branch (f (Free f a)) deriving(Functor)
-instance (Functor f, Diff a) => Diff (Free f a) where
-    type Patch (Free f a) = Free f (Patch a)
-    diff ffa ffa' = do
-        a <- ffa
-        a' <- ffa'
-        return $ diff a a'
+data Free f a = Leaf a | Branch (f (Free f a)) deriving(Functor, Generic)
+data FreeDiff f a df da = LeafLeaf da 
+                        -- Need Diff2 for polymorphic types. TODO: implement Diff2
+                        | BranchBranch (df (FreeDiff f a df da))
+                        | LeafBranch a 
+                        | BranchLeaf f deriving(Show)
 
-    papply pfa ffa = do
-        p <- pfa
-        a <- ffa
-        return $ papply p a
+-- That is, I need for a type f :: * -> *, (Patch f) :: * -> *, so I can
+-- write (Patch f) (<different object in hole>) fearlessly
+-- Need Diff2 for polymorphic types. TODO: implement Diff2
+instance (Functor f, Diff a, Diff (f a)) => Diff (Free f a) where
+    type Patch (Free f a) = (FreeDiff f a (Patch (f a)) (Patch a))
+
+    diff (Leaf a) (Leaf a') = LeafLeaf (diff a a')
+
+    papply (LeafLeaf da) (Leaf a) = Leaf (papply da a)
+
+instance (Eq a, Eq (f (Free f a))) => Eq (Free f a) where
+    (Leaf a) == (Leaf a') = a == a'
+    (Branch ffa) == (Branch ffa') = ffa == ffa'
+    _ == _ = False
+
+instance (Arbitrary a, Arbitrary (f (Free f a))) => Arbitrary (Free f a) where
+    arbitrary = QC.oneof [Leaf <$> arbitrary, Branch <$> arbitrary]
+
+
+instance (P.Pretty a, P.Pretty (f (Free f a))) => P.Pretty (Free f a) where
+    pretty (Leaf a) = P.pretty "(leaf " P.<> P.pretty a <> P.pretty ")"
+    pretty (Branch ffa) = P.pretty "(branch " P.<> P.pretty ffa P.<> P.pretty ")"
 
 instance Diff () 
 instance Diff Void 
 instance (Diff a, Diff b) => Diff (a, b) 
 instance (Diff a, Diff b) => Diff (Either a b)
+instance (Diff a) => Diff (Maybe a)
 \end{code}
 
 
@@ -376,6 +395,9 @@ applyPempty proxy pa a = (papply pa a) == a
 
 -- type instance DT Int = (NumDelta Int)
 data NumDelta a = NumDelta a deriving(Show)
+
+instance Show a => P.Pretty (NumDelta a) where
+    pretty nd = P.pretty (show nd)
 
 
 instance Diff Int  where
@@ -709,9 +731,7 @@ could imagine alternate representations. One can choose to generalize
 over all possible representations using a Huffman code, but we shall not
 do so here.
 
-
 \begin{code}
--- | pretty print
 pprint :: P.Pretty a => a -> IO ()
 pprint a = do 
     P.putDocW 80 . P.pretty $ a
@@ -722,6 +742,8 @@ tests = defaultMain $ testGroup "QuickCheck"
             [qcDiffApplyPatch (Proxy :: Proxy Int) "Int"
             ,qcDiffApplyPatch (Proxy :: Proxy String) "String"
             ,qcDiffApplyPatch (Proxy :: Proxy (Either Int Int)) "Either Int Int"
+            ,qcDiffApplyPatch (Proxy :: Proxy (Free Maybe Int)) "Free Maybe Int"
+            ,qcDiffApplyPatch (Proxy :: Proxy (Either Int Int)) "Free ((,) Int) Int"
             ]
 
 main :: IO ()

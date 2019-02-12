@@ -1,14 +1,17 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
+{-# LANGUAGE TypeOperators #-}
 module TemplateGenerics where
 import Control.Monad
 import Language.Haskell.TH
 
 
 class Diff a where
-  type family Patch a :: *
+  data family Patch a
   diff :: a -> a -> Patch a
+  apply :: a -> Patch a -> Maybe a
+  trivial :: Patch a
 
-data PolyCons a = PolyCons a 
-data List a = Nil | Cons a (List a)
-data Stream a = SCons a (Stream a)
+-- x ::Dec
+-- x = InstanceD None
