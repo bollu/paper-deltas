@@ -334,6 +334,16 @@ qcDiffApplyPatch proxy name =
         (name ++ ":b <-> a +$ a == b")
         (diffApplyPatch proxy)
 
+-- Fucked, I need injectivity?
+applyPempty :: (Diff a, Eq a) => Proxy a -> a -> Bool
+applyPempty proxy a = pempty +$ a == a
+
+qcApplyPempty :: (Diff a, Eq a, Arbitrary a, Show a) =>
+    Proxy a -> String -> TestTree
+qcApplyPempty proxy name =
+    QC.testProperty (name ++ "pempty +$a == a")
+    (applyPempty proxy)
+
  
 \end{code}
 \end{comment}
