@@ -241,6 +241,7 @@ data Void  deriving(Generic)
 absurd :: Void -> a
 absurd v = case v of
 
+-- | TODO: deal with partial diff and patch. Diff should be @a -> a -> Maybe (Patch a)@
 class Diff a where
   type family Patch a :: *
   type Patch a = GPatch (Rep a) a
