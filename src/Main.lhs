@@ -177,6 +177,8 @@ We first begin with our GHC incantations:
 {-# LANGUAGE TypeOperators  #-}
 {-# LANGUAGE AllowAmbiguousTypes  #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving  #-}
+{-# LANGUAGE TypeApplications  #-}
+{-# LANGUAGE NoMonomorphismRestriction  #-}
 import Prelude hiding ((.))
 import Data.Monoid
 import Control.Arrow
@@ -193,6 +195,12 @@ import qualified WorkingGenerics as WG
 import qualified Data.FingerTree as FT
 import qualified Data.LCA.Online as LCA
 import qualified Data.LCA.View as LCA
+-- Test harness
+import Test.Tasty
+import Test.Tasty.QuickCheck as QC
+import Test.QuickCheck.Modifiers (NonEmptyList (..))
+import Test.Tasty.HUnit
+import Test.QuickCheck.Function
 
 \end{code}
 Helpers for pretty printing
@@ -233,12 +241,6 @@ data Void  deriving(Generic)
 absurd :: Void -> a
 absurd v = case v of
 
--- data Dict :: Constraint -> * where
---   Dict :: a => Dict a
-
--- instance Show (Dict a) where
---   show = const "dict"
-
 class Diff a  where
   type family Patch a :: *
   type Patch a = GPatch (Rep a) a
@@ -246,6 +248,21 @@ class Diff a  where
   diff :: a -> a -> Patch a
   default diff :: (Generic a, GDiff (Rep a), Patch a ~ (GPatch (Rep a)) a) => a -> a -> Patch a
   diff a a' = gdiff (from a) (from a')
+
+  papply :: Patch a -> a -> a
+  -- default apply = undefined
+
+  -- empty patch
+  pempty :: Patch a
+
+-- operator for diff
+(<->) :: Diff a => a -> a -> Patch a
+(<->) = diff
+
+
+-- operator for patch
+(+$) :: Diff a => Patch a -> a -> a
+(+$) = papply
 
 class GDiff (gen :: * -> *)  where
   type family GPatch gen :: * -> *
@@ -279,14 +296,51 @@ instance (GDiff f) => GDiff (M1 i t f)  where
 
 
 -- recursion
+-- TODO: This does not resolve! Factor out recursion separately and then
+-- define it
 instance (Diff f) => GDiff (K1 i f) where
    type GPatch (K1 i f) = (K1 i (Patch f))
    gdiff (K1 x) (K1 x') = K1 $ diff x x'
+
+
+-- Define Diff on free f a
+data Free f a = Leaf a | Branch (f (Free f a)) deriving(Functor)
+instance (Functor f, Diff a) => Diff (Free f a) where
+    type Patch (Free f a) = Free f (Patch a)
+    diff ffa ffa' = do
+        a <- ffa
+        a' <- ffa'
+        return $ diff a a'
 
 instance Diff () 
 instance Diff Void 
 instance (Diff a, Diff b) => Diff (a, b) 
 instance (Diff a, Diff b) => Diff (Either a b)
+\end{code}
+
+
+\begin{comment}
+\begin{code}
+data Proxy a = Proxy
+
+-- | Quickcheck instance for diff
+diffApplyPatch :: (Diff a, Eq a)  => Proxy a -> a -> a -> Bool
+diffApplyPatch proxy a b = (b <-> a) +$ a == b
+
+qcDiffApplyPatch :: (Diff a, Eq a, Arbitrary a, Show a) => 
+    Proxy a -> String -> TestTree
+qcDiffApplyPatch proxy name = 
+     QC.testProperty 
+        (name ++ ":b <-> a +$ a == b")
+        (diffApplyPatch proxy)
+
+ 
+\end{code}
+\end{comment}
+
+\section{Diff instances for regular types}
+
+\begin{code}
 
 -- type instance DT Int = (NumDelta Int)
 data NumDelta a = NumDelta a deriving(Show)
@@ -321,6 +375,8 @@ instance Diff a => Diff (Stream a) where
   diff (x:<xs) (x':<xs') = (diff x x'):<(diff xs xs')
 
 
+
+
 -- This 1. conflicts with string, 2. does not work properly.
 -- instance {-# OVERLAPS #-}  Diff a => Diff [a] where
 --   type Patch [a] = [Patch a]
@@ -349,11 +405,28 @@ r = Right 10
 
 dlr = diff l r
 
-
--- Step 2: We want nice ways to render the deltas.
-showPatch :: Diff a => Patch a -> String
-showPatch = undefined
 \end{code}
+
+\section{Inefficiency of the above encoding}
+While the above encoding is clearly sufficient since we consider
+all possible cases, is it really the minimal representation?
+
+\begin{theorem}
+Minimality of diffs: The diffs that are constructed by the tensoring
+process are minimal in terms of size, as counted by number of bits
+required for the representation
+\end{theorem}
+\begin{proof}
+TODO
+\end{proof}
+
+\begin{theorem}
+Types that allow for diff factorization: The class of types
+whose diffs can be factors (like \hsmint{Bool}) is: \textbf{TODO}
+\end{theorem}
+\begin{proof}
+TODO
+\end{proof}
 
 
 \section{Checkpoints}
@@ -495,9 +568,98 @@ runChkPrograms = do
     runChkProgramDelta "prog1" chkInstrsProg1 "start-"
     runChkProgram "prog2" chkInstrsProg2 "start-"
     runChkProgramDelta "prog2" chkInstrsProg2 "start-"
-
 \end{code}
 
+\section{Using checkpointing for MCMC}
+We use the above constructed checkpointing infrastructre to implement
+a lighweight markov-chain-monte-carlo implementation, which saves
+the previously seen best results in terms of a diff. This sees
+a huge difference in comparison the the naive method.
+
+\textbf{TODO: evaluation section / metrics}
+
+\section{Checkpointing for Hoopl}
+We benchmark against the naive implementation of \hsmint{Checkpoint}
+in \texttt{Hoopl} versus our optimised implementation. The results are:
+
+\textbf{TODO: evaluation section / metrics}
+
+
+
+\section{Automatically deriving delta-driven interpreters}
+Recently, React and similar frameworks propose an API where one
+pretends to be doing all the work from scratch. However, internal
+to the API, only the delta to the previous state is computed and applied.
+Here, we show a general framework that can be built on top of the
+diff framework, using the Free monad/Cofree comonad pairing.
+
+\begin{code}
+-- f := free, g := functor 
+bindFree :: Functor g => Free g a -> (a -> Free g b) -> Free g b
+bindFree (Leaf a) a2fgb = (a2fgb a) 
+bindFree (Branch fga) a2fgb = 
+  Branch $ (`bindFree` a2fgb) <$> fga
+
+-- Does this have a better instance?
+apFree :: Functor g => Free g (a -> b) -> Free g a -> Free g b
+apFree frga2b frga = 
+  bindFree frga2b  (\a2b ->
+    bindFree frga  (\a -> Leaf $ a2b a))
+
+instance Functor f => Applicative (Free f) where
+  pure = Leaf
+  (<*>) = apFree
+
+instance Functor f => Monad (Free f) where
+ return = pure
+ (>>=) = bindFree
+
+-- cofree comonad
+data Cofree g a = Cobranch a (g (Cofree g a)) deriving(Functor)
+
+class Comonad w where
+  extract :: w a -> a
+  (=>>) :: w a -> (w a -> b) -> w b
+
+
+instance Functor g => Comonad (Cofree g) where
+  extract (Cobranch a _) = a
+  (cur@(Cobranch a g_cofree_a)) =>> cofree_a_to_b = 
+    let cur' = cofree_a_to_b cur 
+        next = (fmap (=>> cofree_a_to_b) g_cofree_a)
+    in Cobranch cur' next
+
+
+coiter :: Functor f => (a -> f a) -> a -> Cofree f a
+coiter psi a = Cobranch a (coiter psi <$> psi a)
+ 
+
+class (Functor f, Functor g) => Pairing f g where
+  pair :: (a -> b -> r) -> f a -> g b -> r
+
+data Identity a = Identity a deriving(Show, Functor)
+
+instance Pairing Identity Identity where
+  pair f (Identity a) (Identity b) = f a b
+
+instance Pairing f g => Pairing (Cofree f) (Free g) where
+  pair p (Cobranch a  _ ) (Leaf x)  = p a x
+  pair p (Cobranch _ fs) (Branch gs) = pair (pair p) fs gs
+
+instance Pairing ((->) a) ((,) a) where
+  pair p f = uncurry (p . f)
+
+instance Pairing ((,) a) ((->) a) where
+  pair p f g = pair (flip p) g f
+
+
+
+liftF :: (Functor f) => f a -> Free f a
+liftF fa = Branch $ Leaf <$> fa
+\end{code}
+
+
+\textbf{TODO: figure this out. Feels like it is doable, but how precisely?}
 
 
 \section{Efficient encoding of deltas}
@@ -519,10 +681,17 @@ pprint a = do
     P.putDocW 80 . P.pretty $ a
     putStrLn ""
 
+tests :: IO ()
+tests = defaultMain $ testGroup "QuickCheck" 
+            [qcDiffApplyPatch (Proxy :: Proxy Int) "Int"
+            ,qcDiffApplyPatch (Proxy :: Proxy String) "String"
+            ,qcDiffApplyPatch (Proxy :: Proxy (Either Int String)) "Int | String"
+            ,qcDiffApplyPatch (Proxy :: Proxy (Either Int String)) "String"]
+
 main :: IO ()
 main = do
     runChkPrograms
-    WG.main
+    tests
 \end{code}
 
 
