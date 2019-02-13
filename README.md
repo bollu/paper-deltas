@@ -1,4 +1,7 @@
 # Deltas: An algebraic theory of diffs in haskell
+[![Build Status](https://travis-ci.com/bollu/paper-deltas.svg?token=pjHzFXxnXziVY1C82Cs7&branch=master)](https://travis-ci.com/bollu/paper-deltas)
+
+
 - [See current paper version here](TODO: fill in link)
 
 
@@ -13,8 +16,7 @@
 - [Partial monoids](https://arxiv.org/pdf/1002.2166.pdf)
 - [Arrows and static ananlysis](https://elvishjerricco.github.io/2017/03/10/profunctors-arrows-and-static-analysis.html)
 - [Roll forward not back](./reading/roll-forward-not-back.pdf)
-- [A model for parallel incremental computation](./reading/two for the price of one: a model for parallel and incremental computation.pdf)
-- [](./reading/
+- [A model for parallel incremental computation](./reading/two-for-the-price-of-one-parallel-and-incremental-computation.pdf)
 - [Sketches of how to do proper deltas of sums](./SKETCH.md)
 
 # To do
