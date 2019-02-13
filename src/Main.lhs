@@ -179,6 +179,7 @@ We first begin with our GHC incantations:
 {-# LANGUAGE GeneralizedNewtypeDeriving  #-}
 {-# LANGUAGE TypeApplications  #-}
 {-# LANGUAGE NoMonomorphismRestriction  #-}
+{-# LANGUAGE Rank2Types  #-}
 import Prelude hiding ((.))
 import Data.Monoid
 import Control.Arrow
@@ -319,23 +320,108 @@ instance (Diff f) => GDiff (K1 i f) where
    gpapply (K1 p) (K1 x) = K1 $ papply p x
 
 
+-- class Diff2 (d :: * -> *) where
+--     type Patch2 d :: * -> *
+--     diff2 :: forall a. Diff a => d a -> d a -> Patch2 d (Patch a)
+--     apply2 :: forall a. Diff a => Patch2 d (Patch a) -> d a -> Maybe (d a)
+
 -- Define Diff on free f a
 data Free f a = Leaf a | Branch (f (Free f a)) deriving(Functor, Generic)
-data FreeDiff f a df da = LeafLeaf da 
-                        -- Need Diff2 for polymorphic types. TODO: implement Diff2
-                        | BranchBranch (df (FreeDiff f a df da))
-                        | LeafBranch a 
-                        | BranchLeaf f deriving(Show)
+data FreeDiff a b c d = 
+    Leaf2Leaf a |
+    Leaf2Branch b |
+    Branch2Leaf c |
+    Branch2Branch d
 
--- That is, I need for a type f :: * -> *, (Patch f) :: * -> *, so I can
--- write (Patch f) (<different object in hole>) fearlessly
--- Need Diff2 for polymorphic types. TODO: implement Diff2
-instance (Functor f, Diff a, Diff (f a)) => Diff (Free f a) where
-    type Patch (Free f a) = (FreeDiff f a (Patch (f a)) (Patch a))
+newtype FCompose f g a = FCompose { getFCompose :: f (g a) } deriving(Functor)
 
-    diff (Leaf a) (Leaf a') = LeafLeaf (diff a a')
+data DiffMaybe a da = Nothing2Just | Just2Just da | Just2Nothing a | Nothing2Nothing
 
-    papply (LeafLeaf da) (Leaf a) = Leaf (papply da a)
+
+mf1 :: Free Maybe Int
+mf1 = Branch (Just (Branch Nothing))
+
+mf2 :: Free Maybe Int
+mf2 = Branch (Just (Branch (Just (Leaf 5))))
+
+mf1_sub_mf2 = Branch (Just2Just (Branch Nothing2Just))
+mf2_sub_mf1 = Branch (Just2Nothing ((Branch (Just (Leaf 5)))))
+
+mf3 :: Free Maybe Int
+mf3 = Branch (Just (Branch (Just (Leaf 6))))
+
+mf4 :: Free Maybe Int
+mf4 = Branch (Just (Branch (Just (Leaf 9))))
+
+
+a1 :: Free (FCompose (FreeDiff (NumDelta Int) Int (Free Maybe Int)) (DiffMaybe Int)) (NumDelta Int)
+a1 = Leaf (NumDelta 3)
+
+
+
+
+a2 :: Free (FCompose (FreeDiff (NumDelta Int) Int (Free Maybe Int)) (DiffMaybe Int)) (NumDelta Int)
+a2 = Branch (FCompose (Leaf2Branch 10))
+
+
+a3 :: Free (FCompose (FreeDiff (NumDelta Int) Int (Free Maybe Int)) (DiffMaybe Int)) (NumDelta Int)
+a3 = Branch (FCompose (Branch2Leaf ((Branch (Just (Leaf 5))))))
+
+a4 :: Free (FCompose (FreeDiff (NumDelta Int) Int (Free Maybe Int)) (DiffMaybe Int)) (NumDelta Int)
+a4 = Branch (FCompose (Branch2Branch (Nothing2Just)))
+
+
+a5 :: Free (FCompose (FreeDiff (NumDelta Int) Int (Free Maybe Int)) (DiffMaybe Int)) (NumDelta Int)
+a5 = Branch (FCompose (Branch2Branch (Just2Nothing 30)))
+
+
+a6 :: Free (FCompose (FreeDiff (NumDelta Int) Int (Free Maybe Int)) (DiffMaybe Int)) (NumDelta Int)
+a6 = Branch (FCompose (Branch2Branch (Just2Just x))) where
+    x = Leaf (NumDelta 10)
+
+
+
+mcom1 :: Free ((,) Int) Int
+mcom1 = Branch (10, Branch (20, Leaf 5))
+
+mcom2 :: Free ((,) Int) Int
+mcom2 = Branch (20, Branch (30, (Branch (40, Leaf 5))))
+
+-- mcom1_sub_mcom2 :: Free ((,) Int) _
+-- mcom1_sub_mcom2 = Branch (-10, Branch (-10, Leaf2Branch 5))
+
+mlist1 :: Free [] Int
+mlist1 = Branch [Branch [Leaf 1, Leaf 2], Leaf 3]
+
+
+mlist2 :: Free [] Int
+mlist2 = Branch [Branch [Leaf 1, Leaf 2], Branch [Leaf 4, Leaf 5], Leaf 5]
+
+
+class Diff2 (f :: * -> *) where
+    type family Patch2 f :: (* -> * -> *)
+    diff2 :: (a -> a -> da) -> f a -> f a -> Patch2 f a da
+
+instance Diff2 Maybe where
+    type Patch2 Maybe = DiffMaybe
+
+    diff2 _ Nothing Nothing = Nothing2Nothing
+    diff2 _ Nothing (Just a) = Nothing2Just 
+    diff2 _ (Just a) Nothing  = Just2Nothing a
+    diff2 f (Just a) (Just a')  = Just2Just (f a a')
+
+freeDiff :: Diff a => Diff2 f => 
+    Free f a -> Free f a -> 
+        Free 
+            (FCompose 
+                (FreeDiff (Patch a) a (Free f a))
+                (Patch2 f (Free f a)))
+            (Patch a)
+freeDiff (Leaf a) (Leaf a') = Leaf (diff a a')
+freeDiff (Leaf a) (Branch a') = Branch $ FCompose (Leaf2Branch a)
+freeDiff br@(Branch a) (Leaf a') = Branch $ FCompose (Branch2Leaf br)
+freeDiff (Branch br) (Branch br') = Branch $ FCompose $ Branch2Branch $ diff2 freeDiff br br'
+
 
 instance (Eq a, Eq (f (Free f a))) => Eq (Free f a) where
     (Leaf a) == (Leaf a') = a == a'
@@ -344,6 +430,7 @@ instance (Eq a, Eq (f (Free f a))) => Eq (Free f a) where
 
 instance (Arbitrary a, Arbitrary (f (Free f a))) => Arbitrary (Free f a) where
     arbitrary = QC.oneof [Leaf <$> arbitrary, Branch <$> arbitrary]
+
 
 
 instance (P.Pretty a, P.Pretty (f (Free f a))) => P.Pretty (Free f a) where
@@ -742,8 +829,8 @@ tests = defaultMain $ testGroup "QuickCheck"
             [qcDiffApplyPatch (Proxy :: Proxy Int) "Int"
             ,qcDiffApplyPatch (Proxy :: Proxy String) "String"
             ,qcDiffApplyPatch (Proxy :: Proxy (Either Int Int)) "Either Int Int"
-            ,qcDiffApplyPatch (Proxy :: Proxy (Free Maybe Int)) "Free Maybe Int"
-            ,qcDiffApplyPatch (Proxy :: Proxy (Either Int Int)) "Free ((,) Int) Int"
+            -- ,qcDiffApplyPatch (Proxy :: Proxy (Free Maybe Int)) "Free Maybe Int"
+            -- ,qcDiffApplyPatch (Proxy :: Proxy (Either Int Int)) "Free ((,) Int) Int"
             ]
 
 main :: IO ()
