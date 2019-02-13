@@ -11,7 +11,9 @@ before_deploy:
     - git config --local user.name "Siddharth Bhat"
     - git config --local user.email "siddu.druid@gmail.com"
     - export TRAVIS_TAG=${TRAVIS_TAG:-$(date +'%Y%m%d%H%M%S')-$(git log --format=%h -1)}
-    - git tag $TRAVIS_TAG
+    # need || true in case the release was already tagged. This is because
+    # the CI is run again on the release, after the release has been pushed.
+    - git tag $TRAVIS_TAG || true
 
 deploy:
   provider: releases
