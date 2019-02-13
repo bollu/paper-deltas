@@ -12,6 +12,10 @@
 - [Categorical theory of patches](https://arxiv.org/pdf/1311.3903.pdf)
 - [Partial monoids](https://arxiv.org/pdf/1002.2166.pdf)
 - [Arrows and static ananlysis](https://elvishjerricco.github.io/2017/03/10/profunctors-arrows-and-static-analysis.html)
+- [Roll forward not back](./reading/roll-forward-not-back.pdf)
+- [A model for parallel incremental computation](./reading/two for the price of one: a model for parallel and incremental computation.pdf)
+- [](./reading/
+- [Sketches of how to do proper deltas of sums](./SKETCH.md)
 
 # To do
 - Derive pretty `show` instances for the deltas to aid debugging
