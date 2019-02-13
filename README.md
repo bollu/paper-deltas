@@ -1,8 +1,7 @@
 # Deltas: An algebraic theory of diffs in haskell
 [![Build Status](https://travis-ci.com/bollu/paper-deltas.svg?token=pjHzFXxnXziVY1C82Cs7&branch=master)](https://travis-ci.com/bollu/paper-deltas)
 
-
-- [See current paper version here](TODO: fill in link)
+- [Downloaded current paper version here: `paper.pdf`](https://github.com/bollu/paper-deltas/releases)
 
 
 # To read:
