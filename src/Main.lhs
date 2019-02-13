@@ -331,11 +331,11 @@ data FreeDiff a b c d =
     Leaf2Leaf a |
     Leaf2Branch b |
     Branch2Leaf c |
-    Branch2Branch d
+    Branch2Branch d deriving(Show)
 
-newtype FCompose f g a = FCompose { getFCompose :: f (g a) } deriving(Functor)
+newtype FCompose f g a = FCompose { getFCompose :: f (g a) } deriving(Functor, Show)
 
-data DiffMaybe a da = Nothing2Just | Just2Just da | Just2Nothing a | Nothing2Nothing
+data DiffMaybe a da = Nothing2Just | Just2Just da | Just2Nothing a | Nothing2Nothing deriving(Show)
 
 
 mf1 :: Free Maybe Int
@@ -410,6 +410,12 @@ instance Diff2 Maybe where
     diff2 _ (Just a) Nothing  = Just2Nothing a
     diff2 f (Just a) (Just a')  = Just2Just (f a a')
 
+data DiffTuple da b db = DiffTuple da db deriving(Show)
+
+instance Diff a => Diff2 ((,) a) where
+    type Patch2 ((,) a) = DiffTuple (Patch a)
+    diff2 f (a, b) (a', b') = DiffTuple (diff a a') (f b b')
+
 freeDiff :: Diff a => Diff2 f => 
     Free f a -> Free f a -> 
         Free 
@@ -431,6 +437,10 @@ instance (Eq a, Eq (f (Free f a))) => Eq (Free f a) where
 instance (Arbitrary a, Arbitrary (f (Free f a))) => Arbitrary (Free f a) where
     arbitrary = QC.oneof [Leaf <$> arbitrary, Branch <$> arbitrary]
 
+
+instance (Show a, Show(f (Free f a))) => Show (Free f a) where
+    show (Leaf a) =  "(leaf " ++ show a ++ ")"
+    show (Branch ffa) =  "(branch " ++ show ffa ++ ")"
 
 
 instance (P.Pretty a, P.Pretty (f (Free f a))) => P.Pretty (Free f a) where
