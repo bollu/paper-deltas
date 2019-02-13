@@ -1,0 +1,101 @@
+// vim:ts=4:sw=4:et
+{
+    // splith split container with 2 children
+    "border": "normal",
+    "floating": "auto_off",
+    "layout": "splith",
+    "percent": 1,
+    "type": "con",
+    "nodes": [
+        {
+            // splitv split container with 2 children
+            "border": "normal",
+            "floating": "auto_off",
+            "layout": "splitv",
+            "percent": 0.5,
+            "type": "con",
+            "nodes": [
+                {
+                    // splitv split container with 1 children
+                    "border": "normal",
+                    "floating": "auto_off",
+                    "layout": "splitv",
+                    "percent": 0.5,
+                    "type": "con",
+                    "nodes": [
+                        {
+                            "border": "normal",
+                            "current_border_width": 2,
+                            "floating": "auto_off",
+                            "geometry": {
+                               "height": 955,
+                               "width": 1534,
+                               "x": 0,
+                               "y": 0
+                            },
+                            "name": "2 errors - deltas",
+                            "percent": 1,
+                            "swallows": [
+                               {
+                               // "class": "^Gnome\\-terminal$",
+                               // "instance": "^gnome\\-terminal\\-server$",
+                               // "title": "^2\\ errors\\ \\-\\ deltas$",
+                               // "transient_for": "^$",
+                               // "window_role": "^gnome\\-terminal\\-window\\-be622761\\-4183\\-4f68\\-be1a\\-bb4c601be447$"
+                               }
+                            ],
+                            "type": "con"
+                        }
+                    ]
+                },
+                {
+                    "border": "normal",
+                    "current_border_width": 2,
+                    "floating": "auto_off",
+                    "geometry": {
+                       "height": 955,
+                       "width": 1534,
+                       "x": 0,
+                       "y": 0
+                    },
+                    "name": "i3-save-tree > i3layout.json",
+                    "percent": 0.5,
+                    "swallows": [
+                       {
+                       // "class": "^Gnome\\-terminal$",
+                       // "instance": "^gnome\\-terminal\\-server$",
+                       // "title": "^i3\\-save\\-tree\\ \\>\\ i3layout\\.json$",
+                       // "transient_for": "^$",
+                       // "window_role": "^gnome\\-terminal\\-window\\-4e454652\\-b9a4\\-41cb\\-a681\\-2fd78b891c4c$"
+                       }
+                    ],
+                    "type": "con"
+                }
+            ]
+        },
+        {
+            "border": "normal",
+            "current_border_width": 2,
+            "floating": "auto_off",
+            "geometry": {
+               "height": 724,
+               "width": 1140,
+               "x": 0,
+               "y": 0
+            },
+            "name": "Main.lhs (~/work/paper-deltas/deltas/src) - GVIM",
+            "percent": 0.5,
+            "swallows": [
+               {
+               // "class": "^Gvim$",
+               // "instance": "^gvim$",
+               // "title": "^Main\\.lhs\\ \\(\\~\\/work\\/paper\\-deltas\\/deltas\\/src\\)\\ \\-\\ GVIM$",
+               // "transient_for": "^$",
+               // "window_role": "^vim\\-14514\\-2277217575\\-1550076420$"
+               }
+            ],
+            "type": "con"
+        }
+    ]
+}
+
