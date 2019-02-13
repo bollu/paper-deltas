@@ -401,6 +401,7 @@ mlist2 = Branch [Branch [Leaf 1, Leaf 2], Branch [Leaf 4, Leaf 5], Leaf 5]
 class Diff2 (f :: * -> *) where
     type family Patch2 f :: (* -> * -> *)
     diff2 :: (a -> a -> da) -> f a -> f a -> Patch2 f a da
+    patch2 :: (da -> a -> a) -> Patch2 f a da -> f a -> f a
 
 instance Diff2 Maybe where
     type Patch2 Maybe = DiffMaybe
@@ -410,11 +411,24 @@ instance Diff2 Maybe where
     diff2 _ (Just a) Nothing  = Just2Nothing a
     diff2 f (Just a) (Just a')  = Just2Just (f a a')
 
+    patch2 _ Nothing2Nothing Nothing = Nothing
+    patch2 _ Nothing2Just (Just x) = Nothing
+    patch2 _ (Just2Nothing a) Nothing = Just a
+    patch2 f (Just2Just da) (Just a) = Just $ f da a
+
+
 data DiffTuple da b db = DiffTuple da db deriving(Show)
 
 instance Diff a => Diff2 ((,) a) where
     type Patch2 ((,) a) = DiffTuple (Patch a)
     diff2 f (a, b) (a', b') = DiffTuple (diff a a') (f b b')
+    patch2 f (DiffTuple da db) (a, b) = (da +$ a, f db b)
+
+type FreePatch f a = Free 
+            (FCompose 
+                (FreeDiff (Patch a) a (Free f a))
+                (Patch2 f (Free f a)))
+            (Patch a)
 
 freeDiff :: Diff a => Diff2 f => 
     Free f a -> Free f a -> 
@@ -423,10 +437,20 @@ freeDiff :: Diff a => Diff2 f =>
                 (FreeDiff (Patch a) a (Free f a))
                 (Patch2 f (Free f a)))
             (Patch a)
+-- a <-> b
 freeDiff (Leaf a) (Leaf a') = Leaf (diff a a')
 freeDiff (Leaf a) (Branch a') = Branch $ FCompose (Leaf2Branch a)
 freeDiff br@(Branch a) (Leaf a') = Branch $ FCompose (Branch2Leaf br)
 freeDiff (Branch br) (Branch br') = Branch $ FCompose $ Branch2Branch $ diff2 freeDiff br br'
+
+
+-- p +$ b
+freeApply :: (Diff a, Diff2 f) => FreePatch f a -> Free f a -> Free f a
+freeApply (Leaf da) (Leaf a) = Leaf (da +$ a)
+freeApply (Branch (FCompose (Leaf2Branch x))) _ =  Leaf x
+freeApply (Branch (FCompose (Branch2Leaf x))) _ = x
+freeApply (Branch (FCompose (Branch2Branch fx))) (Branch ffx) =  
+    Branch $ patch2 freeApply fx ffx
 
 
 instance (Eq a, Eq (f (Free f a))) => Eq (Free f a) where
@@ -481,6 +505,21 @@ applyPempty proxy pa a = (papply pa a) == a
 -- qcApplyPempty proxy name =
 --     QC.testProperty (name ++ "pempty +$a == a")
 --     (applyPempty proxy)
+
+
+-- | QuickCheck instance for free diff
+freeDiffApplyPatch :: (Diff a, Diff2 f, Eq (Free f a)) => 
+    Proxy (Free f a) -> Free f a -> Free f a -> Bool
+freeDiffApplyPatch proxy a b = freeApply (freeDiff a b) b == a
+
+qcFreeDiffApplyPatch :: (Show (Free f a), 
+    Arbitrary (Free f a), Diff a, Diff2 f, Eq (Free f a)) =>
+    Proxy (Free f a)  -> String -> TestTree
+qcFreeDiffApplyPatch proxy name = 
+     QC.testProperty 
+        ("[" ++ name ++ "]: b <-> a +$ a == b")
+        (freeDiffApplyPatch proxy)
+
 
  
 \end{code}
@@ -599,9 +638,9 @@ incrTime (Time i) = Time (i + 1)
 instance P.Pretty Time where
     pretty (Time t) = P.pretty "t" <> P.pretty t
 
-instance {-# OVERLAPS #-} P.Pretty a => Show a where
-    show a = let doc = P.layoutPretty P.defaultLayoutOptions (P.pretty a)
-        in P.renderString doc
+--  instance {-# OVERLAPS #-} P.Pretty a => Show a where
+--      show a = let doc = P.layoutPretty P.defaultLayoutOptions (P.pretty a)
+--          in P.renderString doc
 
 -- | TODO: think of the invariants here. Do we want to start with knowing
 -- | the first value? I think we do
@@ -839,8 +878,8 @@ tests = defaultMain $ testGroup "QuickCheck"
             [qcDiffApplyPatch (Proxy :: Proxy Int) "Int"
             ,qcDiffApplyPatch (Proxy :: Proxy String) "String"
             ,qcDiffApplyPatch (Proxy :: Proxy (Either Int Int)) "Either Int Int"
-            -- ,qcDiffApplyPatch (Proxy :: Proxy (Free Maybe Int)) "Free Maybe Int"
-            -- ,qcDiffApplyPatch (Proxy :: Proxy (Either Int Int)) "Free ((,) Int) Int"
+            ,qcFreeDiffApplyPatch (Proxy :: Proxy (Free Maybe Int)) "Free Maybe Int"
+            ,qcFreeDiffApplyPatch (Proxy :: Proxy (Free ((,) Int) Int)) "Free ((,) Int) Int"
             ]
 
 main :: IO ()
