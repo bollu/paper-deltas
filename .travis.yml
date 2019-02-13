@@ -5,7 +5,7 @@ before_install:
 - sudo apt-get -qq update && sudo apt-get install -y --no-install-recommends texlive-fonts-recommended texlive-latex-extra texlive-fonts-extra dvipng texlive-latex-recommended texlive texlive-full python-pygments pandoc
 script:
 - make paper/paper.tex
-- cd paper && pdflatex -interaction=nonstopmode -shell-escape paper.tex 
+- cd paper && pdflatex -interaction=nonstopmode -shell-escape paper.tex; cd ../
 before_deploy:
     # Set up git user name and tag this commit
     - git config --local user.name "Siddharth Bhat"
