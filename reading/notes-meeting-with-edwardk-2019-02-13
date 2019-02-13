@@ -1,0 +1,121 @@
+- STM, rolls back on conflict. If there are conflicts, you have livelock
+    problems.
+- Revisions, roll forward. Has `fork`. Each side has its own copy of the world.
+    If both sides mangle the world, when we join, we have conflicts. And
+    we will specify how to merge conflicts.
+- Give the versions and their LCA. 3-way-merge should fix up the variables.
+- Terrible concurrency framework. So let's fix it.
+- Spin up a spark for every thing, and then join, we can get ~2x parallelism.
+- The magic is the second paper. `m a -> m (a, m a)`. If I can compute 
+the read set and write set, and have a trace of fork-join, I can look at the
+output. If it has changed, then we can walk back on the join graph.
+- Valid 3-way merge strategy: 
+- In the second paper, they showed that on 8 cores, they can get 30x speedup
+on raytracing, computing CSS layouts, etc.
+- Parallelism + incrementalism in one thing.
+- Implementation by don lion. Built in haskell as a IO hell kind of thing.
+  His references held the tree of all variants. Had to explicitly throw
+  away tasks we were going to use.
+- Can do much better with sparks. This prompted LCA, because we needed the
+  LCA.
+- Monad holding on to history of reads and writes. Can build the aggregate
+  reads and writes from one revision to another. This is stored in a
+  skew-binary-random-access-list. This lets us compute things "upto the LCA".
+  Monad writes reads and writes into a hash map.
+- Use the Key machinery in `guanxi` to implement this.
+- Check the `logic` branch of `guanxi`. Use keys to make references.
+
+```hs
+Edward Kmettrecord :: m a -> m (a, m a)
+22:09Edward Kmettnewtype Key s a = Key (MutVar s (Proxy a))
+22:17Edward KmettKey s a -> Key s b -> Maybe (Coercion a b)
+22:18Edward KmetttestCoercion
+22:18Edward Kmettdata Box s where Box :: Key s a -> a -> Box s
+22:18Edward Kmettunlock :: Box s -> Key s a -> Maybe a
+```
+
+- In `Par`, we don't have versioned variables. join semilattices + threshold
+  reads + writes.
+- I gave you all the `Par` machinery on top of `Revision`, we don't
+need to store idempotent writes. Changes to `Par` managed `LVars` don't
+have to be recorded in the tape.
+
+- This lets different worlds talk. To merge worlds together, we can
+share versioned variables together, they don't need to be stored. So,
+the history monad is par + join. 
+- On working with versioned variables, they just have a 3-way merge strategy.
+- We don't need to have a specific merge strategy for 3 way merges.
+- The paper from Don lion etc: They have a bunch of examples of ways to do
+  merge strategies. 
+- Look at berkhard and lion paper. 
+- Automatically lift it over State. There are some instances over `Reader`.
+  `Writer` is also wonky.
+- Adapton relationship? record dependencies, invalidate stuff. Mini adapton
+  paper by bird.
+- Some work on differential programming. 
+- http://www.philipzucker.com/reverse-mode-auto-differentiation-kind-like-lens/
+    a -> (b, (Delta a a' -> Delta b b', (Delta a' a'' -> Delta b' b'', Delta a'' a''' -> Delta b'' b''', ...)
+- Try to hide the sum space by making it the projection of a larger product space.
+- Sums are bad because they're not differentiable
+- Jane street incremental: it's different, but kmett didn't like it.
+  they trade a lot off of it. 
+
+- STOKE for equality saturation.
+
+- "What you see is not what you compile" - why work on actual assembly.
+
+- Use STOKE to generate rules that tell you what to change.
+- EqSat: state space. STOKE: random search. Once it finds something,
+  encode that as a rule into eqsat.
+
+- Feed an EPEG to the instruction scheduler, produce a short
+  instruction sequence. 
+
+- Pseudo boolean is the wrong solver for EqSat. Operations don't
+  always have the same price. Once we want stddev, we have a quadratic
+  programming problem, so we might as well go convex.
+
+- We don't want to *just* emit an instruction schedule. 
+    "Adaptive dynamic programming". How do we solve a reinforcement
+    learning style problem. If we had some way to enumerate the prob.
+    space we can use Rollout. 
+
+- We can have a baseline instruction scheduler and then Rollout. this is
+  actually pretty damn good (interesting!) find paper.
+
+- In theory, pseudo boolean solve, find program, schedule it. This is the
+    default policy. We can run some kind of MCTS over the space of programs
+    we are trying to synthesize. (Dmitry bertsakis --- lectures at Singhuai university)
+    (https://www.youtube.com/watch?v=PR9AVYMmHz8)
+
+- Convex programming: https://arxiv.org/pdf/1506.00760.pdf
+
+- Alex Evans. One of the favourite demosceners.
+
+
+guanxi
+------
+
+- Started from kanren, made it now depth first. It's going to go explore
+random things. One of the things that kanren was doing was to try to
+synthesize programs that look like it were synthesized by humans.
+
+- Rank according to this, and then generate it. They had bad probability 
+distribution.
+
+- Use arithmetic coding, 
+
+- Low discrepancy sequences. Not fair about where you're going.
+
+- Graphics: Atmospheric rendering.
+
+- Each variable could be viewed as a dimension. We are choosing which
+  variables to expand at each point. So then pick which set to expand.
+
+- Figure out a way to stay depth first, so we can use the machine properly /
+  use references. 
+
+- For CDCL, we need depth first.
+
+- Depth first seach 
+
