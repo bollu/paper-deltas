@@ -21,6 +21,7 @@ executable deltas
                        , WorkingGenerics
                        , EotUser
                        , Tensor
+                       , PatchDSL
   -- other-extensions:
   build-depends:       base >=4.10 && <4.11
                        , generics-eot
@@ -38,5 +39,6 @@ executable deltas
                        , tasty
                        , tasty-quickcheck
                        , tasty-hunit
+                       , profunctors
   hs-source-dirs:      src
   default-language:    Haskell2010
