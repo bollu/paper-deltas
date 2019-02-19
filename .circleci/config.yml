@@ -1,0 +1,9 @@
+version: 2
+jobs:
+   build:
+     docker:
+       - image: koppor/texlive
+     steps:
+       - checkout
+       - run: cd paper && pdflatex -shell-escape paper.tex; cd ../
+       - run: VERSION=$(date +'%Y%m%d%H%M%S')-$(git log --format=%h -1) ghr -t ${GITHUB_TOKEN} -u ${CIRCLE_PROJECT_USERNAME} -r ${CIRCLE_PROJECT_REPONAME} -c ${CIRCLE_SHA1} -delete ${VERSION} paper/paper.pdf

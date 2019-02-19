@@ -3,6 +3,12 @@
 
 - [Downloaded current paper version here: `paper.pdf`](https://github.com/bollu/paper-deltas/releases)
 
+# Work log
+- Create roll forward not back infrastructure and __benchmark it__.
+- Create diff instance for `Pairing g f -> Pairing (Cofree g) (Patch (Free f))`.
+  for cofree comonad.
+- Try to create similar instance for arrows.
+- Create diff instance for `Mu f = Mu { unMu :: f (Mu f) }`.
 
 # To read:
 - [Math.se question about affine groups](https://math.stackexchange.com/questions/3096752/affine-vector-spaces-with-groups)

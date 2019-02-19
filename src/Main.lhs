@@ -226,7 +226,7 @@ this for multiple purposes, including pretty printing, caching, and debugging.
 We construct a family of useful operators around this object.
 
 % why default data family instances do not make sense
-% https://stackoverflow.com/questions/18965939/data-family-default-instances
+% https://stackoverflow.com/questions/18965938/data-family-default-instances
 
 We now have a class \hsmint{Diff}, which represents a type that
 has a structure which can be diffed. We have an associated data
@@ -621,7 +621,7 @@ TODO
 \end{proof}
 
 
-\section{Checkpoints}
+\section{Checkpoints, Roll forwards}
 
 Now that we have the infrastructure to talk about diffs, we can now
 recreate certain well-known patterns with this machinery: One of them
@@ -672,6 +672,7 @@ saveTipChkTrace f (ChkTrace t p aprev a) =
         p' = LCA.cons (unTime t) (f aprev a) p
     in ChkTrace t' p' a a
 
+-- TODO: make this use the roll forward not back technology
 data ChkInstr a where
     -- sequences two computations 
     ISequence :: ChkInstr a  -> ChkInstr a  -> ChkInstr a
@@ -682,6 +683,8 @@ data ChkInstr a where
     IBranch :: ChkInstr a -> ChkInstr a -> ChkInstr a
     -- computes a pure function over the computation.
     ICompute :: (a -> a) -> ChkInstr a
+    -- merges two computations
+    IMerge :: (a -> b -> c) -> ChkInstr a -> ChkInstr b -> ChkInstr c
 
 instance P.Pretty (ChkInstr a) where
     pretty (ISequence a b) = P.hsep [P.pretty a, P.pretty b]
@@ -886,7 +889,10 @@ main :: IO ()
 main = do
     runChkPrograms
     tests
+    putStrLn "yay acme is cool"
 \end{code}
+
+
 
 
 %% Acknowledgments

@@ -99,9 +99,3 @@ patchcompose fab fbc =
   let fac =  fst . (runPatchFun fbc) . fst . (runPatchFun fab) in
     PatchFun $ \a -> (fac a, \pa -> pure $ fac (pa +$ a))
 
-
-
-instance Category (PatchFun s) where
-
-
-
