@@ -479,6 +479,10 @@ instance (Diff a, Diff b) => Diff (a, b)
 instance (Diff a, Diff b) => Diff (Either a b)
 instance (Diff a) => Diff (Maybe a)
 
+\end{code}
+
+Diffs for recursive data types
+\begin{code}
 
 -- Y combinnator, twisted
 data Mu (f :: * -> * -> *) (a :: *) = Mu { unMu :: (f a) (Mu f a) }
@@ -491,9 +495,6 @@ data DiffList a where
     DiffListConsNil :: [a] -> DiffList a
     DiffListNilNil :: DiffList a
     DiffListConsCons ::Diff a => (Patch a) -> (DiffList a) -> DiffList a
-
-
-    
 
 
 instance (Diff a, P.Pretty (Patch a), P.Pretty a) => P.Pretty (DiffList a) where
@@ -515,6 +516,32 @@ instance {-# OVERLAPS #-} Diff a => Diff [a] where
     papply (DiffListConsNil as) [] = as
     papply (DiffListConsCons pa pas) (a:as) = (papply pa a):papply pas as
 
+\end{code}
+
+Try and use the Diff instance for list, and Traversable/Foldable to construct
+a Diff for all containers? This does not work since we cannot "unfold" from
+a Foldable.
+
+I really do not wish to reason about Y combinator
+\begin{code}
+-- This does not work, since we cannot unfold from a foldable, so we
+-- cannot implement 'patch'. Well, unless we can perhaps use traverse?
+data DiffFoldable (f :: * -> *) a = DiffFoldable (DiffList a)
+
+toList :: Foldable f => f a -> [a]
+toList as = foldr (:) [] as
+
+-- fromList . toList = id
+fromList :: (Foldable f, Traversable f) => [a] -> f a
+fromList = undefined
+
+
+-- | Diff any foldable
+diffFoldable :: (Foldable f , Diff a) => f a -> f a -> DiffFoldable f a
+diffFoldable as as' = DiffFoldable $ diff (toList as) (toList as')
+
+patchFoldable :: (Foldable f, Traversable f, Diff a) => DiffFoldable f a -> f a -> f a
+patchFoldable (DiffFoldable pas) as = fromList (papply pas (toList as))
 \end{code}
 
 
