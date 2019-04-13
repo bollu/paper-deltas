@@ -23,7 +23,7 @@ executable deltas
                        , Tensor
                        , PatchDSL
   -- other-extensions:
-  build-depends:       base >=4.10 && <4.11
+  build-depends:       base
                        , generics-eot
                        , generics-sop
                        , constraints

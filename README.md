@@ -11,6 +11,11 @@
 - Create diff instance for `Mu f = Mu { unMu :: f (Mu f) }`.
 
 # To read:
+- [Composable memory transactions](https://www.microsoft.com/en-us/research/wp-content/uploads/2005/01/2005-ppopp-composable.pdf)
+- [Transactional memory with data invariants](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/07/stm-invariants.pdf)
+- [Safe programmable speculative parallelism](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/pldi026-vaswani.pdf)
+- [Selective applicative functors](https://www.staff.ncl.ac.uk/andrey.mokhov/selective-functors.pdf)
+- [`vector-patches` on Hackage](https://hackage.haskell.org/package/patches-vector-0.1.5.4/docs/Data-Patch-Internal.html)
 - [Math.se question about affine groups](https://math.stackexchange.com/questions/3096752/affine-vector-spaces-with-groups)
 - [Equality on (Cont r a)](https://www.reddit.com/r/haskell/comments/ahu6jp/fun_fact_the_continuation_monad_cont_r_a_has_an/)
 - [Monads for incremental computing](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.8.3014&rep=rep1&type=pdf)

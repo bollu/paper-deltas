@@ -674,17 +674,18 @@ saveTipChkTrace f (ChkTrace t p aprev a) =
 
 -- TODO: make this use the roll forward not back technology
 data ChkInstr a where
-    -- sequences two computations 
+    -- | sequences two computations 
     ISequence :: ChkInstr a  -> ChkInstr a  -> ChkInstr a
-    -- takes an instruction and checkpoints the final value.
-    -- This can be extracted out after running the computation.
+    -- | takes an instruction and checkpoints the final value.
+    -- | This can be extracted out after running the computation.
     IChk :: ChkInstr a
-    -- branches off the computations
+    -- | branches off the computations
     IBranch :: ChkInstr a -> ChkInstr a -> ChkInstr a
-    -- computes a pure function over the computation.
+    -- | computes a pure function over the computation.
     ICompute :: (a -> a) -> ChkInstr a
-    -- merges two computations
-    IMerge :: (a -> b -> c) -> ChkInstr a -> ChkInstr b -> ChkInstr c
+    -- | merge point of two computations
+    -- | Semantics of this? ie, what is the correct way to construct the merge?
+    IMerge :: (a -> a) -> ChkInstr a -> ChkInstr a -> ChkInstr a 
 
 instance P.Pretty (ChkInstr a) where
     pretty (ISequence a b) = P.hsep [P.pretty a, P.pretty b]
@@ -701,6 +702,7 @@ runChkInstrsNaive i  a = go i [newChkTrace a a] where
     go (IChk) trs =  map (saveTipChkTrace (\_ a -> a)) trs
     go (ISequence i i') trs = go i' . go i $ trs 
     go (IBranch i i') trs =  (go i trs) ++ (go i' trs)
+
 
 runChkInstrsDelta :: (Monoid (Patch a), Diff a) => ChkInstr a -> a -> [ChkTrace (Patch a) a]
 runChkInstrsDelta i a = go i [newChkTrace mempty a] where
@@ -744,7 +746,7 @@ runChkProgramDelta name p start = do
     pprint trs
 
 
-newtype StrPrefix = StrPrefix String  deriving(Show, Monoid)
+newtype StrPrefix = StrPrefix String  deriving(Show, Semigroup, Monoid)
 instance P.Pretty StrPrefix where
     pretty (StrPrefix s) = P.pretty "Prefix(" P.<> (P.pretty s) P.<> (P.pretty ")")
 
