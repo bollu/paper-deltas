@@ -192,7 +192,7 @@ import qualified Language.Haskell.TH as TH
 import qualified Data.Text.Prettyprint.Doc as P
 import qualified Data.Text.Prettyprint.Doc.Util as P
 import qualified Data.Text.Prettyprint.Doc.Render.String as P
-import qualified WorkingGenerics as WG
+-- import qualified WorkingGenerics as WG
 import qualified Data.FingerTree as FT
 import qualified Data.LCA.Online as LCA
 import qualified Data.LCA.View as LCA
@@ -318,6 +318,8 @@ instance (Diff f) => GDiff (K1 i f) where
    gdiff (K1 x) (K1 x') = K1 $ diff x x'
 
    gpapply (K1 p) (K1 x) = K1 $ papply p x
+
+
 
 
 -- class Diff2 (d :: * -> *) where
@@ -476,6 +478,43 @@ instance Diff Void
 instance (Diff a, Diff b) => Diff (a, b) 
 instance (Diff a, Diff b) => Diff (Either a b)
 instance (Diff a) => Diff (Maybe a)
+
+
+-- Y combinnator, twisted
+data Mu (f :: * -> * -> *) (a :: *) = Mu { unMu :: (f a) (Mu f a) }
+
+data ListF a as = Nil | Cons a as
+type List a = Mu ListF a
+
+data DiffList a where 
+    DiffListNilCons :: DiffList a 
+    DiffListConsNil :: [a] -> DiffList a
+    DiffListNilNil :: DiffList a
+    DiffListConsCons ::Diff a => (Patch a) -> (DiffList a) -> DiffList a
+
+
+    
+
+
+instance (Diff a, P.Pretty (Patch a), P.Pretty a) => P.Pretty (DiffList a) where
+    pretty DiffListNilCons = P.pretty "nil-to-cons"
+    pretty (DiffListConsNil as) = P.pretty "++" P.<> P.pretty as
+    pretty DiffListNilNil = P.pretty "[]"
+    pretty (DiffListConsCons da dl) = 
+        P.pretty da P.<> P.pretty ":" P.<> P.pretty dl
+
+instance {-# OVERLAPS #-} Diff a => Diff [a] where
+    type Patch [a] = DiffList a
+    diff [] [] = DiffListNilNil
+    diff [] as = DiffListNilCons
+    diff as [] = DiffListConsNil as
+    diff (a:as) (a':as') = DiffListConsCons (diff a a') (diff as as')
+
+    papply DiffListNilNil [] = []
+    papply DiffListNilCons (a:as) = []
+    papply (DiffListConsNil as) [] = as
+    papply (DiffListConsCons pa pas) (a:as) = (papply pa a):papply pas as
+
 \end{code}
 
 
@@ -491,7 +530,7 @@ qcDiffApplyPatch :: (Diff a, Eq a, Arbitrary a, Show a) =>
     Proxy a -> String -> TestTree
 qcDiffApplyPatch proxy name = 
      QC.testProperty 
-        ("[" ++ name ++ "]: b <-> a +$ a == b")
+        ("[" ++ name ++ "]: (b <-> a) +$ a == b")
         (diffApplyPatch proxy)
 
 -- Fucked, I need injectivity?
@@ -713,17 +752,35 @@ runChkInstrsDelta i a = go i [newChkTrace mempty a] where
     go (IBranch i i') trs =  (go i trs) ++ (go i' trs)
 
     
+newtype AppendStr = AppendStr String deriving(P.Pretty)
+newtype StrPrefix = StrPrefix String deriving (P.Pretty, Monoid, Semigroup)
+
+instance Diff AppendStr where
+    type Patch AppendStr = StrPrefix
+    diff (AppendStr s) (AppendStr s') =
+        if startswith s' s
+            then StrPrefix $ drop (length s') s
+            else error $ "s: |" ++ s ++ "|  s': |" ++ s' ++ "|"
+
+    papply (StrPrefix spr) (AppendStr s') = AppendStr $ spr ++ s'
+
+    
+append :: String -> AppendStr -> AppendStr 
+append s (AppendStr a) = AppendStr (a ++ s)
+
 
 seqChkInstrs :: [ChkInstr a] -> ChkInstr a
 seqChkInstrs (xs) = foldl1 ISequence xs
 
-chkInstrsProg1 :: ChkInstr String
-chkInstrsProg1 = seqChkInstrs [IChk, ICompute (++ "-a-"), IChk, ICompute (++ "-b-"), IChk]
+chkInstrsProg1 :: ChkInstr AppendStr
+chkInstrsProg1 = seqChkInstrs [IChk, ICompute (append "-a-"), IChk, 
+                               ICompute (append "-b-"), IChk]
 
 
-chkInstrsProg2 :: ChkInstr String
-chkInstrsProg2 = seqChkInstrs [IChk, ICompute (++ "-a-"), IChk, 
-    IBranch (seqChkInstrs [ICompute (++ "-b1-"), IChk]) (seqChkInstrs [ICompute (++ "-b2-"), IChk])]
+chkInstrsProg2 :: ChkInstr AppendStr
+chkInstrsProg2 = seqChkInstrs [IChk, ICompute (append "-a-"), IChk, 
+    IBranch (seqChkInstrs [ICompute (append "-b1-"), IChk]) 
+            (seqChkInstrs [ICompute (append "-b2-"), IChk])]
 
 
 runChkProgram :: P.Pretty a => String -> ChkInstr a -> a -> IO ()
@@ -745,28 +802,33 @@ runChkProgramDelta name p start = do
     putStrLn "* trace:"
     pprint trs
 
+instance Diff Char where
+    type Patch Char = Char
+    diff ca cb = ca
+    papply p a = p
 
-newtype StrPrefix = StrPrefix String  deriving(Show, Semigroup, Monoid)
-instance P.Pretty StrPrefix where
-    pretty (StrPrefix s) = P.pretty "Prefix(" P.<> (P.pretty s) P.<> (P.pretty ")")
 
--- crazy bad, terribly inefficient, implementation.
-instance Diff String where
-    type Patch String = StrPrefix
-    diff s s' = 
-        if startswith s' s
-            then StrPrefix $ drop (length s') s
-            else error $ "s: |" ++ s ++ "|  s': |" ++ s' ++ "|"
-
-    papply (StrPrefix spr) s' = spr ++ s'
+-- newtype StrPrefix = StrPrefix String  deriving(Show, Semigroup, Monoid)
+-- instance P.Pretty StrPrefix where
+--     pretty (StrPrefix s) = P.pretty "Prefix(" P.<> (P.pretty s) P.<> (P.pretty ")")
+-- 
+-- -- crazy bad, terribly inefficient, implementation.
+-- instance {-# OVERLAPPABLE #-} Diff String where
+--     type Patch String = StrPrefix
+--     diff s s' = 
+--         if startswith s' s
+--             then StrPrefix $ drop (length s') s
+--             else error $ "s: |" ++ s ++ "|  s': |" ++ s' ++ "|"
+-- 
+--     papply (StrPrefix spr) s' = spr ++ s'
         
 
 runChkPrograms :: IO ()
 runChkPrograms = do
-    runChkProgram "prog1" chkInstrsProg1 "start-"
-    runChkProgramDelta "prog1" chkInstrsProg1 "start-"
-    runChkProgram "prog2" chkInstrsProg2 "start-"
-    runChkProgramDelta "prog2" chkInstrsProg2 "start-"
+    runChkProgram "prog1" chkInstrsProg1 (AppendStr "start-")
+    runChkProgramDelta "prog1" chkInstrsProg1 (AppendStr "start-")
+    runChkProgram "prog2" chkInstrsProg2 (AppendStr "start-")
+    runChkProgramDelta "prog2" chkInstrsProg2 (AppendStr "start-")
 \end{code}
 
 \section{Using checkpointing for MCMC}
@@ -881,6 +943,7 @@ pprint a = do
 tests :: IO ()
 tests = defaultMain $ testGroup "QuickCheck" 
             [qcDiffApplyPatch (Proxy :: Proxy Int) "Int"
+            ,qcDiffApplyPatch (Proxy :: Proxy Char) "Char"
             ,qcDiffApplyPatch (Proxy :: Proxy String) "String"
             ,qcDiffApplyPatch (Proxy :: Proxy (Either Int Int)) "Either Int Int"
             ,qcFreeDiffApplyPatch (Proxy :: Proxy (Free Maybe Int)) "Free Maybe Int"
