@@ -328,7 +328,9 @@ instance (Diff f) => GDiff (K1 i f) where
 --     apply2 :: forall a. Diff a => Patch2 d (Patch a) -> d a -> Maybe (d a)
 
 -- Define Diff on free f a
-data Free f a = Leaf a | Branch (f (Free f a)) deriving(Functor, Generic)
+data Free (f :: * -> *) a = Leaf a | Branch (f (Free f a)) deriving(Functor, Generic)
+
+
 data FreeDiff a b c d = 
     Leaf2Leaf a |
     Leaf2Branch b |
@@ -468,7 +470,6 @@ instance (Show a, Show(f (Free f a))) => Show (Free f a) where
     show (Leaf a) =  "(leaf " ++ show a ++ ")"
     show (Branch ffa) =  "(branch " ++ show ffa ++ ")"
 
-
 instance (P.Pretty a, P.Pretty (f (Free f a))) => P.Pretty (Free f a) where
     pretty (Leaf a) = P.pretty "(leaf " P.<> P.pretty a <> P.pretty ")"
     pretty (Branch ffa) = P.pretty "(branch " P.<> P.pretty ffa P.<> P.pretty ")"
@@ -481,14 +482,35 @@ instance (Diff a) => Diff (Maybe a)
 
 \end{code}
 
-Diffs for recursive data types
+Diff for Y combinator
 \begin{code}
-
 -- Y combinnator, twisted
 data Mu (f :: * -> * -> *) (a :: *) = Mu { unMu :: (f a) (Mu f a) }
 
-data ListF a as = Nil | Cons a as
+-- Can we encode Mu in terms of Free?
+-- f a as = ListF = Nil | Cons a as 
+-- Pretty sure this is wrong?
+mu2free :: Functor (f a) => Mu f a -> Free (f a) a
+-- f (Mu f)
+mu2free (Mu f_mu_f) = Branch (fmap mu2free f_mu_f)
+
+-- | Can lower Mu to Free, cannot raise because there's an argument missing.
+-- | Can we implement the lift?
+free2mu :: Free f a -> Mu (f a) a
+free2mu = TODO
+
+
+
+data ListF a as = LFNil | LFCons a as deriving(Functor, Show)
 type List a = Mu ListF a
+
+mul1 :: List Int
+mul1 = Mu $ LFCons 1 (Mu (LFNil))
+
+\end{code}
+
+Diffs for just list
+\begin{code}
 
 data DiffList a where 
     DiffListNilCons :: DiffList a 
