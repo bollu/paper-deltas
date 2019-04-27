@@ -9,6 +9,7 @@
   for cofree comonad.
 - Try to create similar instance for arrows.
 - Create diff instance for `Mu f = Mu { unMu :: f (Mu f) }`.
+- chekpointing for reverse mode AD: https://en.wikipedia.org/wiki/Checkpointing_scheme
 
 # To read:
 - [Composable memory transactions](https://www.microsoft.com/en-us/research/wp-content/uploads/2005/01/2005-ppopp-composable.pdf)
@@ -28,6 +29,7 @@
 - [Roll forward not back](./reading/roll-forward-not-back.pdf)
 - [A model for parallel incremental computation](./reading/two-for-the-price-of-one-parallel-and-incremental-computation.pdf)
 - [Sketches of how to do proper deltas of sums](./SKETCH.md)
+- `toList' = partsOf traverse (Context id) -- traverse with structure`
 
 # To do
 - Derive pretty `show` instances for the deltas to aid debugging
