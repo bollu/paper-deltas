@@ -8,16 +8,16 @@ before_install:
 script:
 - make paper/paper.tex
 - cd paper && pdflatex -interaction=nonstopmode -shell-escape paper.tex; cd ../
+
 before_deploy:
 - git config --local user.name "Siddharth Bhat"
 - git config --local user.email "siddu.druid@gmail.com"
 - export TRAVIS_TAG=${TRAVIS_TAG:-$(date +'%Y-%m-%d---%H:%M:%S')---$(git log --format=%h
   -1)}
 - git tag $TRAVIS_TAG || true
+
 deploy:
   provider: releases
   api_key:
     secure: TPZyf9L03i1cpMuPEmCooIKygep4ZxtdppM/kB/CQwmrGE0QyLQX00/jvEfrAQWxNi6csRjao4LicP5wr2eVmPT3Hc6Xlu+ZKuWo0AlRfrULn9HOAmpUg1/vIhIUUrWbfCq6pbTi4VvduWdFDkZ9we0uiUuv99tEhiD2VimqKDt+ii0XGjvmF5KDjeeKWe8IK7Eetlr1vBfyUmXe3xEY9XhLGF8rd0U6OILttySiVFyLYffGLsF87lliQpByvp5J/k9C14VRz0fYlR3qZhMsx/N7iuiJ9yJtMRycO9e+TWMTrRUDGFxBHebMamZMmiqlhWk5F6r34svmfPYmoQCRqxT8efcaMkfxLFHxKX6G478PMcZLYOayUNR7mfm7cAC6N6h9KtbKl4LsdJbARZ6LLbgT73oZacRVpiLC4wvbN5JlUI/upfRSIhE0ZPTBJP7Lmdfpf4bDXKS6zpDxyWwES+E3brlSG+h3hZc0fkspnIPvrxRaE+eYVi6L/bzkB35HHVbYupjdzdqnyceZ5P4k5PxV1AoToOJjl6fuy+JDjuB2M1tOh5Es/smjBi0CbaAdo/hxPbfThH1EBSWDurm0k2Dsmx7Sg9/Mkp2MszBkqteIsgkgHO+xzuGf8D7vVj4/pNsAR0+2XBbgmvZ/tW5K+pQuXxVxJ+VMZAKfFMN7L9E=
   file: paper/paper.pdf
-  on:
-    repo: bollu/paper-deltas
